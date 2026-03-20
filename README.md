@@ -1,2 +1,2 @@
-# telegram-tarot-bot-2
+# telegram-tarot-bot
 telegram meme tarot bot
