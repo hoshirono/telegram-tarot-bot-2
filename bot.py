@@ -2,140 +2,86 @@ import asyncio
 import random
 import time
 import os
-
-from io import BytesIO
-import aiohttp
-
+from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, BufferedInputFile
 from aiogram.enums import ChatAction
 
-# 🔐 БЕРЕМ ИЗ ENV (НЕ ХАРДКОДЬ!)
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-HF_TOKEN = os.getenv("HF_TOKEN")
-
-if not TOKEN:
-    raise ValueError("❌ Нет TELEGRAM_TOKEN")
+# 🔑 ВСТАВЬ СЮДА
+TOKEN = "8705289370:AAF14RnDpQIi7SxChdQIpGshbD2iB_G9La0"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-memory = {}
+IMAGE_FOLDER = "images"
+
 active_users = set()
 last_message_time = {}
-used_predictions = set()
+night_sent = {}
 
 keyboard = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text="🔮 ну давай, разъеби мою судьбу")]],
+    keyboard=[[KeyboardButton(text="💀 дай мне визуальный кринж пожалуйста")]],
     resize_keyboard=True
 )
 
-# 🔮 генерация предсказаний
-def generate_prediction(user_id=None):
-    subjects = [
-        "Сегодня", "Эта неделя", "Твоя жизнь", "Реальность",
-        "Твои решения", "Твой мозг"
+# 🖼 взять случайную картинку
+def get_random_image():
+    if not os.path.exists(IMAGE_FOLDER):
+        return None
+
+    files = [
+        f for f in os.listdir(IMAGE_FOLDER)
+        if f.lower().endswith((".jpg", ".jpeg", ".png"))
     ]
 
-    actions = [
-        "станет", "превратится в", "скатится в",
-        "окажется", "будет выглядеть как"
-    ]
+    if not files:
+        return None
 
-    trash = [
-        "полный пиздец",
-        "цирк долбоебизма",
-        "жалкая попытка всё исправить",
-        "медленный краш ожиданий",
-        "хаос без смысла",
-        "очередной кринж"
-    ]
+    path = os.path.join(IMAGE_FOLDER, random.choice(files))
 
-    endings = [
-        "и ты это проглотишь.",
-        "и ты снова ничего не поймешь.",
-        "и ты будешь делать вид, что всё ок.",
-        "но давай честно — ты сам виноват.",
-        "и ты опять выберешь худший вариант."
-    ]
+    with open(path, "rb") as f:
+        return BufferedInputFile(f.read(), filename="img.jpg")
 
-    sarcasm = [
-        "Красавчик.",
-        "Стабильность.",
-        "Ну ты даёшь.",
-        "Это уже стиль жизни.",
-        "Всё по канону."
-    ]
-
-    for _ in range(200):
-        text = f"{random.choice(subjects)} {random.choice(actions)} {random.choice(trash)}, {random.choice(endings)} {random.choice(sarcasm)}"
-
-        if text not in used_predictions:
-            used_predictions.add(text)
-
-            if user_id in memory and memory[user_id]:
-                text += f"\n\nты писал: '{random.choice(memory[user_id])}' — это многое объясняет."
-
-            return text
-
-    return "Даже судьба устала придумывать тебе новые провалы."
-
-# 🖼 генерация картинки
-async def generate_image(prompt):
-    # если есть HF — пробуем
-    if HF_TOKEN:
-        try:
-            async with aiohttp.ClientSession() as session:
-                url = "https://router.huggingface.co/hf-inference/models/stabilityai/sdxl-turbo"
-
-                headers = {
-                    "Authorization": f"Bearer {HF_TOKEN}",
-                    "Content-Type": "application/json"
-                }
-
-                payload = {
-                    "inputs": f"{prompt}, cursed, absurd, weird, realistic photo"
-                }
-
-                async with session.post(url, headers=headers, json=payload, timeout=25) as r:
-                    if r.status == 200:
-                        data = await r.read()
-                        return BufferedInputFile(data, filename="img.jpg")
-        except:
-            pass
-
-    # fallback (ВСЕГДА РАБОТАЕТ)
-    url = f"https://picsum.photos/512?random={random.randint(1,100000)}"
-
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as r:
-            data = await r.read()
-            return BufferedInputFile(data, filename="img.jpg")
-
-# 🎨 промпты
-def generate_prompt():
+# 😈 ночная крипота
+def night_text():
     return random.choice([
-        "awkward silence, people staring",
-        "man embarrassed in public",
-        "weird surreal situation",
-        "person alone at night",
-        "absurd uncanny photo",
-        "liminal space weird human",
-        "strange cursed moment photo"
+        "не оборачивайся",
+        "ты сейчас не один",
+        "я уже был здесь",
+        "оно смотрит вместе со мной",
+        "ты почти проснулся",
+        "сегодня ты снова это услышишь",
+        "проверь дверь",
+        "ты забыл кое-что закрыть",
+        "оно ближе, чем ты думаешь",
+        "я не должен был это видеть"
     ])
 
-# 🎴 отправка
-async def send_card(message: types.Message):
+# 🤡 случайные дневные сообщения
+def random_creepy():
+    return random.choice([
+        "я тут подумал о тебе",
+        "ты странно себя ведёшь",
+        "мне не нравится твоя активность",
+        "ты правда считаешь это нормальным?",
+        "я наблюдаю",
+        "интересно, когда ты поймешь",
+        "ты опять это сделал",
+        "даже не пытайся объяснить"
+    ])
+
+# 📸 отправка картинки
+async def send_image(message: types.Message):
     await bot.send_chat_action(message.chat.id, ChatAction.TYPING)
     await asyncio.sleep(random.uniform(1, 2))
 
-    prediction = generate_prediction(message.from_user.id)
-    prompt = generate_prompt()
+    photo = get_random_image()
 
-    photo = await generate_image(prompt)
-
-    await message.answer_photo(photo=photo, caption=f"🔮 {prediction}")
+    if photo:
+        await message.answer_photo(photo=photo)
+    else:
+        await message.answer("картинок нет. как и смысла в твоей жизни")
 
 # 🚀 старт
 @dp.message(CommandStart())
@@ -143,54 +89,48 @@ async def start(message: types.Message):
     active_users.add(message.from_user.id)
 
     await message.answer(
-        "жми кнопку и посмотрим, насколько ты сегодня облажаешься",
+        "жми кнопку и получишь что заслужил",
         reply_markup=keyboard
     )
 
 # 🎰 кнопка
-@dp.message(lambda m: m.text == "🔮 ну давай, разъеби мою судьбу")
+@dp.message(lambda m: m.text == "накаркай, гад🐦‍⬛️")
 async def spin(message: types.Message):
     active_users.add(message.from_user.id)
-    await send_card(message)
+    await send_image(message)
 
-# 🧠 память
-@dp.message()
-async def remember(message: types.Message):
-    user_id = message.from_user.id
-    active_users.add(user_id)
-
-    memory.setdefault(user_id, []).append(message.text)
-
-    if len(memory[user_id]) > 100:
-        memory[user_id].pop(0)
-
-    await message.answer(
-        f"запомнил: '{message.text}'",
-        reply_markup=keyboard
-    )
-
-# 👁 инициатива (2 раза в день)
+# 👁 watcher
 async def watcher():
     while True:
         await asyncio.sleep(60)
 
+        now = datetime.now()
+        hour = now.hour
+
         for user_id in list(active_users):
-            now = time.time()
+            current_time = time.time()
             last = last_message_time.get(user_id, 0)
 
-            if now - last < 43200:
+            # 🌙 НОЧНАЯ КРИПОТА (1 раз за ночь)
+            if 2 <= hour <= 5:
+                key = f"{user_id}_{now.date()}"
+
+                if not night_sent.get(key):
+                    try:
+                        await bot.send_message(user_id, f"👁 {night_text()}")
+                        night_sent[key] = True
+                    except:
+                        pass
+
                 continue
 
-            text = random.choice([
-                "я всё ещё думаю о тебе",
-                "ты странно себя ведёшь",
-                "ты ведь не забыл про меня?",
-                "мне кажется, ты снова облажался"
-            ])
+            # 🤡 обычные сообщения (раз в ~12 часов)
+            if current_time - last < 43200:
+                continue
 
             try:
-                await bot.send_message(user_id, f"👁 {text}")
-                last_message_time[user_id] = now
+                await bot.send_message(user_id, f"👁 {random_creepy()}")
+                last_message_time[user_id] = current_time
             except:
                 pass
 
@@ -198,7 +138,6 @@ async def watcher():
 async def main():
     print("бот запущен")
 
-    # 💀 фикс конфликта
     await bot.delete_webhook(drop_pending_updates=True)
 
     asyncio.create_task(watcher())
