@@ -9,38 +9,132 @@ from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, BufferedInputFile
 from aiogram.enums import ChatAction
 
-# 🔑 ВСТАВЬ СЮДА
+# 🔑 ВСТАВЬ ТОКЕН
 TOKEN = "8705289370:AAF14RnDpQIi7SxChdQIpGshbD2iB_G9La0"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# 📁 ПАПКА С КАРТИНКАМИ (ВАЖНО)
-IMAGE_FOLDER = "/app/images"  # для Railway
-# если локально -> "images"
+# 📁 ПАПКА С КАРТИНКАМИ
+IMAGE_FOLDER = "/app/images"  # локально: "images"
+
+# 🧠 память
+memory = {}
+learned_phrases = {}
+last_seen = {}
+last_auto = {}
 
 active_users = set()
-last_message_time = {}
-night_sent = {}
 
 keyboard = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text="💀 дай мне кринж-картинку")]],
+    keyboard=[[KeyboardButton(text="💀 ну давай че там покажи дичь")]],
     resize_keyboard=True
 )
 
-# 🖼 получение картинки
+# =======================
+# 🧠 ПАМЯТЬ
+# =======================
+
+def remember_user(user_id, text):
+    memory.setdefault(user_id, []).append(text)
+
+    if len(memory[user_id]) > 100:
+        memory[user_id].pop(0)
+
+    if len(text) > 8:
+        learned_phrases.setdefault(user_id, []).append(text)
+
+        if len(learned_phrases[user_id]) > 50:
+            learned_phrases[user_id].pop(0)
+
+
+# =======================
+# 😈 СТИЛЬ ПОЛЬЗОВАТЕЛЯ
+# =======================
+
+def mimic_style(user_id, text):
+    if user_id not in memory:
+        return text
+
+    samples = memory[user_id]
+
+    # если пишет без заглавных — бот тоже
+    if all(s.lower() == s for s in samples[-5:]):
+        text = text.lower()
+
+    # если мат — добавляем мат
+    if any("хуй" in s or "бля" in s for s in samples):
+        text += random.choice([
+            " да, именно так",
+            " ну ты понял",
+            " классика блять",
+            " ахуенно конечно"
+        ])
+
+    return text
+
+
+# =======================
+# 💀 ИСКАЖЕНИЕ ФРАЗ
+# =======================
+
+def distort_phrase(text):
+    words = text.split()
+
+    if len(words) > 3:
+        words[random.randint(0, len(words)-1)] = "…"
+
+    if random.random() < 0.3:
+        words.append("или нет")
+
+    return " ".join(words)
+
+
+# =======================
+# 😈 ГЕНЕРАЦИЯ СООБЩЕНИЯ
+# =======================
+
+def generate_mock(user_id):
+    if user_id in learned_phrases and learned_phrases[user_id]:
+        phrase = random.choice(learned_phrases[user_id])
+        distorted = distort_phrase(phrase)
+
+        base = random.choice([
+            "ты же писал:",
+            "я помню это:",
+            "ты сказал:",
+            "это было:"
+        ])
+
+        endings = random.choice([
+            "и ты норм?",
+            "и после этого ты живешь дальше?",
+            "это многое объясняет",
+            "мне стало хуже после этого"
+        ])
+
+        text = f"{base}\n\n{distorted}\n\n{endings}"
+        return mimic_style(user_id, text)
+
+    return "ты пока недостаточно наговорил"
+
+
+# =======================
+# 🖼 КАРТИНКИ
+# =======================
+
 def get_random_image():
     if not os.path.exists(IMAGE_FOLDER):
-        print("❌ папки нет:", IMAGE_FOLDER)
+        print("нет папки:", IMAGE_FOLDER)
         return None
 
     files = [
         f for f in os.listdir(IMAGE_FOLDER)
-        if f.lower().endswith((".jpg", ".png", ".jpeg"))
+        if f.endswith((".jpg", ".png", ".jpeg"))
     ]
 
     if not files:
-        print("❌ нет файлов в папке")
+        print("нет файлов")
         return None
 
     path = os.path.join(IMAGE_FOLDER, random.choice(files))
@@ -49,28 +143,6 @@ def get_random_image():
         return BufferedInputFile(f.read(), filename="img.jpg")
 
 
-# 😈 крипота
-def night_text():
-    return random.choice([
-        "не оборачивайся",
-        "ты сейчас не один",
-        "я уже был здесь",
-        "оно смотрит вместе со мной",
-        "проверь дверь",
-        "ты почти проснулся"
-    ])
-
-def random_creepy():
-    return random.choice([
-        "я наблюдаю",
-        "ты странно себя ведёшь",
-        "ты опять это сделал",
-        "мне не нравится это",
-        "интересно, когда ты поймешь"
-    ])
-
-
-# 📸 отправка фото
 async def send_image(message: types.Message):
     await bot.send_chat_action(message.chat.id, ChatAction.TYPING)
     await asyncio.sleep(random.uniform(1, 2))
@@ -80,67 +152,103 @@ async def send_image(message: types.Message):
     if photo:
         await message.answer_photo(photo=photo)
     else:
-        await message.answer("картинки проебались где-то")
+        await message.answer("картинки где-то сдохли")
 
 
-# 🚀 старт
+# =======================
+# 🚀 СТАРТ
+# =======================
+
 @dp.message(CommandStart())
 async def start(message: types.Message):
-    active_users.add(message.from_user.id)
+    user_id = message.from_user.id
+    active_users.add(user_id)
 
     await message.answer(
-        "жми кнопку и страдай",
+        "жми кнопку и не жалуйся потом",
         reply_markup=keyboard
     )
 
 
-# 🎰 кнопка
-@dp.message(lambda m: m.text == "накаркай, гад🐦‍⬛️")
+# =======================
+# 🎰 КНОПКА
+# =======================
+
+@dp.message(lambda m: m.text == "накаркай, гад 🐦‍⬛️")
 async def spin(message: types.Message):
-    active_users.add(message.from_user.id)
+    user_id = message.from_user.id
+    active_users.add(user_id)
+
     await send_image(message)
 
 
-# 👁 авто-писанина
+# =======================
+# 🧠 СООБЩЕНИЯ ПОЛЬЗОВАТЕЛЯ
+# =======================
+
+@dp.message()
+async def handle(message: types.Message):
+    user_id = message.from_user.id
+    active_users.add(user_id)
+
+    remember_user(user_id, message.text)
+
+    now = time.time()
+    last_seen[user_id] = now
+
+    # шанс мгновенного ответа
+    if random.random() < 0.5:
+        await message.answer(generate_mock(user_id), reply_markup=keyboard)
+
+
+# =======================
+# 👁 СЛЕЖКА
+# =======================
+
 async def watcher():
     while True:
-        await asyncio.sleep(60)
+        await asyncio.sleep(30)
 
-        now = datetime.now()
-        hour = now.hour
+        now = time.time()
+        hour = datetime.now().hour
 
         for user_id in list(active_users):
-            current_time = time.time()
-            last = last_message_time.get(user_id, 0)
+            last = last_seen.get(user_id, 0)
+            last_auto_msg = last_auto.get(user_id, 0)
 
-            # 🌙 НОЧЬ (2-5)
-            if 2 <= hour <= 5:
-                key = f"{user_id}_{now.date()}"
-
-                if not night_sent.get(key):
-                    try:
-                        await bot.send_message(user_id, f"👁 {night_text()}")
-                        night_sent[key] = True
-                    except:
-                        pass
+            # 📡 реакция после активности (очень важно)
+            if now - last < 60 and now - last_auto_msg > 300:
+                try:
+                    text = generate_mock(user_id)
+                    await bot.send_message(user_id, f"👁 {text}")
+                    last_auto[user_id] = now
+                except:
+                    pass
                 continue
 
-            # ☠️ не чаще 2 раз в день
-            if current_time - last < 43200:
-                continue
+            # 🌙 ночная крипота
+            if 2 <= hour <= 5 and now - last_auto_msg > 21600:
+                try:
+                    creepy = random.choice([
+                        "ты не один",
+                        "я вижу тебя",
+                        "оно тоже здесь",
+                        "не смотри назад",
+                        "ты проснулся?"
+                    ])
+                    await bot.send_message(user_id, f"👁 {creepy}")
+                    last_auto[user_id] = now
+                except:
+                    pass
 
-            try:
-                await bot.send_message(user_id, f"👁 {random_creepy()}")
-                last_message_time[user_id] = current_time
-            except:
-                pass
 
+# =======================
+# ▶️ ЗАПУСК
+# =======================
 
-# 🔥 ГЛАВНЫЙ ФИКС
 async def main():
     print("бот запущен")
 
-    # 💀 УБИВАЕМ ВСЕ КОНФЛИКТЫ
     await bot.delete_webhook(drop_pending_updates=True)
 
     asyncio.create_task(watcher())
@@ -149,7 +257,7 @@ async def main():
         try:
             await dp.start_polling(bot)
         except Exception as e:
-            print("перезапуск из-за ошибки:", e)
+            print("перезапуск:", e)
             await asyncio.sleep(3)
 
 
