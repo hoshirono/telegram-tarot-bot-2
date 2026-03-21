@@ -1,207 +1,160 @@
 import asyncio
 import random
-import os
-import time
-from io import BytesIO
+import logging
+import requests
 
-import aiohttp
 from aiogram import Bot, Dispatcher, types
-from aiogram.filters import CommandStart
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, BufferedInputFile
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.enums import ChatAction
 
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-HF_TOKEN = os.getenv("HF_TOKEN")
+# ===================== НАСТРОЙКИ =====================
+
+TOKEN = "ТВОЙ_TELEGRAM_TOKEN"
+UNSPLASH_KEY = "ТВОЙ_UNSPLASH_ACCESS_KEY"
+
+# ===================== ЛОГИ =====================
+
+logging.basicConfig(level=logging.INFO)
+
+# ===================== БОТ =====================
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-memory = {}
-active_users = set()
-last_message_time = {}
+# ===================== КНОПКА =====================
 
 keyboard = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text="🔮 ну давай, предскажи мне жизнь")]],
+    keyboard=[
+        [KeyboardButton(text="🔮 Дай мне кринж-судьбу")]
+    ],
     resize_keyboard=True
 )
 
-# 💀 СЦЕНАРИИ
-SCENARIOS = [
-    {
-        "name": "Социальный провал",
-        "text": [
-            "ты скажешь что-то, после чего станет неловко",
-            "ты попробуешь пошутить и пожалеешь",
-        ],
-        "irony": [
-            "но ты сделаешь вид, что всё нормально",
-            "и это запомнят",
-        ],
-        "prompt": "awkward silence, people staring, realistic photo"
-    },
-    {
-        "name": "Иллюзия контроля",
-        "text": [
-            "тебе будет казаться, что всё под контролем",
-            "ты будешь уверен в своём плане",
-        ],
-        "irony": [
-            "и всё сломается в этот момент",
-            "и это будет глупо",
-        ],
-        "prompt": "man confident but chaos behind him, surreal photo"
-    },
-    {
-        "name": "Абсурдная ошибка",
-        "text": [
-            "ты сделаешь ошибку, которую сложно объяснить",
-            "ты сам не поймёшь, зачем это сделал",
-        ],
-        "irony": [
-            "но объяснение придумаешь",
-            "и даже поверишь в него",
-        ],
-        "prompt": "confused person, surreal weird situation"
-    },
-    {
-        "name": "Неловкое сообщение",
-        "text": [
-            "ты отправишь сообщение и сразу пожалеешь",
-            "ты перечитаешь это и зависнешь",
-        ],
-        "irony": [
-            "но уже поздно",
-            "и ответ будет хуже",
-        ],
-        "prompt": "person staring at phone in shock, night"
-    },
-    {
-        "name": "Самообман",
-        "text": [
-            "ты убедишь себя, что всё нормально",
-            "ты проигнорируешь очевидное",
-        ],
-        "irony": [
-            "и это будет ошибкой",
-            "но не сразу",
-        ],
-        "prompt": "person smiling but everything collapsing"
-    },
+# ===================== ПАМЯТЬ =====================
+
+used_predictions = set()
+user_memory = {}
+
+# ===================== ГЕНЕРАЦИЯ ПРЕДСКАЗАНИЙ =====================
+
+subjects = [
+    "Сегодня", "В ближайшее время", "Судьба", "Вселенная", "Ты",
+    "Этот день", "Твоя жизнь", "Реальность"
 ]
 
-# 🧠 генерация
-def generate_scenario():
-    s = random.choice(SCENARIOS)
+actions = [
+    "подкинет тебе шанс", "снова проверит тебя", "решит пошутить над тобой",
+    "даст тебе знак", "оставит тебя в недоумении", "сделает вид, что всё нормально",
+    "покажет тебе правду", "сломает твои ожидания"
+]
 
-    text = f"{random.choice(s['text'])}, {random.choice(s['irony'])}"
-    return s["name"], text, s["prompt"]
+outcomes = [
+    "но ты его пропустишь",
+    "и ты сделаешь всё наоборот",
+    "и это было ошибкой",
+    "но ты не поймёшь этого сразу",
+    "и станет только хуже",
+    "но ты будешь доволен собой",
+    "и это даже не самый плохой вариант",
+    "но всем будет всё равно"
+]
 
-# 💀 генерация картинки
-async def generate_image(prompt):
-    async with aiohttp.ClientSession() as session:
-        try:
-            url = "https://router.huggingface.co/hf-inference/models/stabilityai/sdxl-turbo"
+sarcasm = [
+    "В целом, стабильно.",
+    "Ничего нового.",
+    "Ты держишь уровень.",
+    "Это уже стиль жизни.",
+    "Можно было хуже, но ты справился.",
+    "Гордиться нечем, но и стыдиться лень.",
+    "Ты хотя бы стараешься. Наверное."
+]
 
-            headers = {
-                "Authorization": f"Bearer {HF_TOKEN}",
-                "Content-Type": "application/json"
-            }
+def generate_prediction():
+    for _ in range(100):
+        text = f"{random.choice(subjects)} {random.choice(actions)}, {random.choice(outcomes)}. {random.choice(sarcasm)}"
+        if text not in used_predictions:
+            used_predictions.add(text)
+            return text
+    return "Ты исчерпал даже плохие варианты. Поздравляю."
 
-            payload = {
-                "inputs": f"{prompt}, surreal, cursed, weird, realistic photo"
-            }
+# ===================== ПОИСК КАРТИНОК =====================
 
-            async with session.post(url, headers=headers, json=payload, timeout=20) as r:
-                if r.status == 200:
-                    return BytesIO(await r.read())
+def get_image(query):
+    try:
+        url = "https://api.unsplash.com/photos/random"
+        headers = {"Authorization": f"Client-ID {UNSPLASH_KEY}"}
+        params = {"query": query}
 
-        except:
-            pass
+        r = requests.get(url, headers=headers, params=params, timeout=10)
 
-    # fallback (чтобы не ломалось)
-    fallback = random.choice([
-        "https://picsum.photos/512?random=1",
-        "https://picsum.photos/512?random=2",
-        "https://picsum.photos/512?random=3",
-    ])
+        if r.status_code == 200:
+            data = r.json()
+            return data["urls"]["regular"]
+        else:
+            return None
+    except:
+        return None
 
-    async with aiohttp.ClientSession() as session:
-        async with session.get(fallback) as r:
-            return BytesIO(await r.read())
+# ===================== СЦЕНАРИИ (ФОТО + ТЕМА) =====================
 
-# 🎴 отправка
-async def send_card(message: types.Message):
-    await bot.send_chat_action(message.chat.id, ChatAction.TYPING)
-    await asyncio.sleep(random.uniform(1, 2))
+image_themes = [
+    "creepy empty room",
+    "strange person staring",
+    "liminal space",
+    "weird office situation",
+    "awkward social moment",
+    "sad clown",
+    "distorted face",
+    "dark hallway",
+    "surreal photo",
+    "uncomfortable situation"
+]
 
-    card, prediction, prompt = generate_scenario()
+# ===================== СТАРТ =====================
 
-    text = f"🃏 {card}\n\n🔮 {prediction}"
-
-    img = await generate_image(prompt)
-
-    photo = BufferedInputFile(img.read(), filename="img.jpg")
-    await message.answer_photo(photo=photo, caption=text)
-
-# 🚀 старт
-@dp.message(CommandStart())
-async def start(message: types.Message):
-    active_users.add(message.from_user.id)
-
-    await message.answer(
-        "ну давай посмотрим, что у тебя сегодня сломается",
+@dp.message(lambda msg: msg.text == "/start")
+async def start(msg: types.Message):
+    await msg.answer(
+        "Я уже здесь.\nЖми кнопку. Посмотрим, насколько всё плохо.",
         reply_markup=keyboard
     )
 
-# 🎰 кнопка
-@dp.message(lambda m: m.text == "🔮 ну давай, предскажи мне жизнь")
-async def spin(message: types.Message):
-    active_users.add(message.from_user.id)
-    await send_card(message)
+# ===================== ОСНОВНАЯ КНОПКА =====================
 
-# 🧠 память (ТОЛЬКО тут используется)
+@dp.message(lambda msg: "кринж" in msg.text.lower())
+async def tarot(msg: types.Message):
+    await bot.send_chat_action(msg.chat.id, ChatAction.TYPING)
+    await asyncio.sleep(1.5)
+
+    prediction = generate_prediction()
+
+    # персональная подколка (только если писал текст)
+    insult = ""
+    if msg.from_user.id in user_memory:
+        memory = user_memory[msg.from_user.id]
+        insult = f"\n\nКстати, ты писал: \"{memory}\". Это многое объясняет."
+
+    text = f"🔮 {prediction}{insult}"
+
+    theme = random.choice(image_themes)
+    image_url = get_image(theme)
+
+    if image_url:
+        await msg.answer_photo(photo=image_url, caption=text)
+    else:
+        await msg.answer(text + "\n\n(даже картинка не захотела появляться)")
+
+# ===================== ЗАПОМИНАНИЕ СООБЩЕНИЙ =====================
+
 @dp.message()
-async def remember(message: types.Message):
-    user_id = message.from_user.id
-    active_users.add(user_id)
+async def remember(msg: types.Message):
+    if "кринж" not in msg.text.lower():
+        user_memory[msg.from_user.id] = msg.text[:100]
 
-    memory.setdefault(user_id, []).append(message.text)
+# ===================== ЗАПУСК =====================
 
-    if len(memory[user_id]) > 50:
-        memory[user_id].pop(0)
-
-    reply = f"интересно ты пишешь:\n'{message.text}'\n\nуверен, это тебе поможет"
-
-    await message.answer(reply, reply_markup=keyboard)
-
-# 👁 инициатива (макс 2 раза в день)
-async def watcher():
-    while True:
-        await asyncio.sleep(60)
-
-        for user_id in list(active_users):
-            now = time.time()
-            last = last_message_time.get(user_id, 0)
-
-            if now - last < 43200:
-                continue
-
-            text = random.choice([
-                "я всё ещё думаю о твоих решениях",
-                "ты правда уверен в себе?",
-                "интересно, когда ты заметишь",
-            ])
-
-            try:
-                await bot.send_message(user_id, f"👁 {text}")
-                last_message_time[user_id] = now
-            except:
-                pass
-
-# ▶️ запуск
 async def main():
-    print("бот запущен")
-    asyncio.create_task(watcher())
+    print("Бот запущен")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
