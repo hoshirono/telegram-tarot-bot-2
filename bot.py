@@ -1,182 +1,147 @@
 import asyncio
 import random
 import os
-import json
-import requests
-import time
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from openai import OpenAI
 
-# ================= НАСТРОЙКИ =================
+# 🔑 ключи
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-HF_TOKEN = os.getenv("HF_TOKEN")
-
-bot = Bot(token=TOKEN)
+bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
+client = OpenAI(api_key=OPENAI_API_KEY)
 
-DB_FILE = "data.json"
+# 🎮 кнопки
+keyboard = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="🔮 Получить карту")],
+        [KeyboardButton(text="📦 Моя коллекция")]
+    ],
+    resize_keyboard=True
+)
 
-# ================= БАЗА =================
+# 🎨 стили
+STYLES = [
+    "dark gothic tarot card, ultra detailed, masterpiece",
+    "cute anime tarot card, glowing, beautiful",
+    "absurd meme tarot card, surreal, weirdcore"
+]
 
-def load_data():
-    if not os.path.exists(DB_FILE):
-        return {}
-    with open(DB_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+# 💎 редкость
+RARITY = [
+    ("обычная", "simple"),
+    ("редкая", "rare glowing"),
+    ("проклятая 😈", "dark cursed horror")
+]
 
-def save_data(data):
-    with open(DB_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+# 🃏 названия карт
+CARDS = [
+    "Пельмень Wi-Fi",
+    "Скелет-менеджер",
+    "Кот-пророк",
+    "Бог кредитов",
+    "Демон будильника",
+    "Жрец вайба",
+    "Лорд случайных решений"
+]
 
-def get_user(data, user_id):
-    if user_id not in data:
-        data[user_id] = {"cards": []}
-    return data[user_id]
+# 🧠 тексты (быстро и без зависаний)
+PREDICTIONS = [
+    "Ты выбрал худший путь, и это нормально.",
+    "Сегодня ты сделаешь странное решение. Оно сработает.",
+    "Кто-то думает о тебе. И это подозрительно.",
+    "Вселенная в шоке от твоих действий.",
+    "Ты победишь… но зачем?",
+    "Ошибка станет твоей суперсилой.",
+    "Ты уже всё сломал. Осталось насладиться."
+]
 
-# ================= UI =================
+# 🖼 fallback картинки (если API не дал результат)
+FALLBACK_IMAGES = [
+    "https://picsum.photos/512",
+    "https://placekitten.com/512/512",
+    "https://placebear.com/512/512"
+]
 
-def main_keyboard():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="🔮 Получить карту")],
-            [KeyboardButton(text="📦 Моя коллекция")]
-        ],
-        resize_keyboard=True
-    )
 
-# ================= ЛОГИКА =================
-
-def gen_name():
-    a = ["Император","Жрица","Рыцарь","Дьявол","Маг","Скелет","Кот","Пельмень"]
-    b = ["Хаоса","Кринжа","Судьбы","Wi-Fi","Налогов","Абсурда","Боли"]
-    return f"{random.choice(a)} {random.choice(b)}"
-
-def gen_text():
-    return random.choice([
-        "Ты выбрал худший путь, и это нормально.",
-        "Судьба уже смеётся над тобой.",
-        "Сегодня ты снова всё испортишь.",
-        "Карты говорят: лучше не лезь.",
-        "Это знак… плохой знак."
-    ])
-
-# ================= ГЕНЕРАЦИЯ КАРТИНКИ =================
-
-def generate_image(prompt):
-    if not HF_TOKEN:
-        print("❌ Нет HF_TOKEN")
-        return None
-
-    API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
-    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-
+# 🎨 генерация картинки
+async def generate_image(prompt):
     try:
-        response = requests.post(
-            API_URL,
-            headers=headers,
-            json={"inputs": prompt},
-            timeout=60
+        img = client.images.generate(
+            model="gpt-image-1",
+            prompt=prompt,
+            size="1024x1024"
         )
-
-        # если модель спит
-        if response.status_code == 503:
-            print("⏳ Модель спит, ждём...")
-            time.sleep(10)
-            response = requests.post(
-                API_URL,
-                headers=headers,
-                json={"inputs": prompt},
-                timeout=60
-            )
-
-        if response.status_code != 200:
-            print("❌ HF ошибка:", response.text)
-            return None
-
-        file_path = "card.png"
-        with open(file_path, "wb") as f:
-            f.write(response.content)
-
-        return file_path
-
+        return img.data[0].url
     except Exception as e:
-        print("❌ Ошибка генерации:", e)
-        return None
+        print("Ошибка генерации картинки:", e)
+        return random.choice(FALLBACK_IMAGES)
 
-# ================= ХЕНДЛЕРЫ =================
 
+# 🚀 старт
 @dp.message(CommandStart())
 async def start(message: types.Message):
-    data = load_data()
-    get_user(data, str(message.from_user.id))
-    save_data(data)
-
     await message.answer(
-        "💀 ULTIMATE TAROT ONLINE",
-        reply_markup=main_keyboard()
+        "💀 ULTIMATE TAROT ONLINE\n\nНажми кнопку ниже 👇",
+        reply_markup=keyboard
     )
 
-# 🔮 ПОЛУЧИТЬ КАРТУ (без зависания)
-@dp.message(lambda m: m.text == "🔮 Получить карту")
-async def get_card(message: types.Message):
+
+# 🔮 карта
+@dp.message(lambda m: m.text == "🔮 Получить карту" or m.text == "/card")
+async def card(message: types.Message):
     await message.answer("🎨 Генерирую карту...")
 
-    data = load_data()
-    user = get_user(data, str(message.from_user.id))
-
-    name = gen_name()
-    text = gen_text()
+    style = random.choice(STYLES)
+    rarity_text, rarity_prompt = random.choice(RARITY)
+    card_name = random.choice(CARDS)
+    text = random.choice(PREDICTIONS)
 
     prompt = f"""
-tarot card, {name}, dark fantasy, mystical,
-ultra detailed, ornate frame, glowing symbols,
-cinematic lighting, masterpiece
+    tarot card, {card_name},
+    {style},
+    {rarity_prompt},
+    mystical, detailed, high quality, centered composition
+    """
+
+    image_url = await generate_image(prompt)
+
+    caption = f"""
+🃏 {card_name}
+
+💎 Редкость: {rarity_text}
+
+🔮 {text}
 """
 
-    # 🔥 ВАЖНО: убираем зависание
-    loop = asyncio.get_event_loop()
-    img_path = await loop.run_in_executor(None, generate_image, prompt)
-
-    if img_path:
-        photo = types.FSInputFile(img_path)
+    try:
         await message.answer_photo(
-            photo=photo,
-            caption=f"🃏 {name}\n🔮 {text}"
+            photo=image_url,
+            caption=caption,
+            reply_markup=keyboard
         )
-    else:
+    except:
         await message.answer(
-            f"🃏 {name}\n🔮 {text}\n\n⚠️ арт не загрузился"
+            caption + "\n⚠️ (картинка не загрузилась)",
+            reply_markup=keyboard
         )
 
-    user["cards"].append(name)
-    save_data(data)
 
-# 📦 КОЛЛЕКЦИЯ
+# 📦 коллекция (заглушка)
 @dp.message(lambda m: m.text == "📦 Моя коллекция")
 async def collection(message: types.Message):
-    data = load_data()
-    user = get_user(data, str(message.from_user.id))
+    await message.answer("📦 Коллекция пока в разработке 😈", reply_markup=keyboard)
 
-    if not user["cards"]:
-        await message.answer("📦 У тебя пока нет карт")
-        return
 
-    cards = "\n".join(user["cards"][-10:])
-    await message.answer(f"📦 Твои карты:\n{cards}")
-
-# 🧪 DEBUG (если что-то сломается)
-@dp.message()
-async def debug(message: types.Message):
-    await message.answer("я жив 😈")
-
-# ================= ЗАПУСК =================
-
+# ▶️ запуск
 async def main():
-    print("🔥 БОТ ЗАПУЩЕН")
+    print("Бот запущен 🚀")
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
