@@ -12,7 +12,6 @@ load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-# проверка токена
 if not TELEGRAM_TOKEN:
     raise ValueError("❌ TELEGRAM_TOKEN не найден!")
 
@@ -33,7 +32,7 @@ RARITY = [
     ("проклятая 😈", "dark cursed horror tarot")
 ]
 
-# 🧠 генерация текста (локально, без API)
+# 🧠 текст (локально)
 def generate_text():
     texts = [
         "Судьба шепчет: перемены уже рядом.",
@@ -46,22 +45,31 @@ def generate_text():
     ]
     return random.choice(texts)
 
-# 🎨 генерация картинки (через Pollinations)
+# 🎨 генерация картинки с fallback
 def generate_image(style, rarity):
-    prompt = f"{style}, {rarity}, tarot card, mystical, detailed, high quality"
+    prompt = f"{style}, {rarity}, tarot card, mystical, detailed"
     url = f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}"
 
-    response = requests.get(url, timeout=15)
+    try:
+        response = requests.get(url, timeout=10)
 
-    if response.status_code != 200:
-        raise Exception("Ошибка генерации картинки")
+        if response.status_code == 200:
+            file_path = "card.png"
+            with open(file_path, "wb") as f:
+                f.write(response.content)
+            return file_path
 
-    file_path = "card.png"
+    except Exception as e:
+        print("Image error:", e)
 
-    with open(file_path, "wb") as f:
-        f.write(response.content)
+    # fallback картинки (если API умер)
+    fallback_images = [
+        "https://picsum.photos/512",
+        "https://placekitten.com/512/512",
+        "https://dummyimage.com/512x512/000/fff&text=Tarot"
+    ]
 
-    return file_path
+    return random.choice(fallback_images)
 
 # 🚀 старт
 @dp.message(CommandStart())
@@ -77,13 +85,9 @@ async def card(message: types.Message):
     rarity_text, rarity_prompt = random.choice(RARITY)
 
     text = generate_text()
+    image_path = generate_image(style, rarity_prompt)
 
-    try:
-        image_path = generate_image(style, rarity_prompt)
-
-        photo = types.FSInputFile(image_path)
-
-        caption = f"""
+    caption = f"""
 🔮 Твоя карта:
 
 🎨 Стиль: {style}
@@ -92,18 +96,24 @@ async def card(message: types.Message):
 🧠 {text}
 """
 
-        await message.answer_photo(photo=photo, caption=caption)
+    try:
+        # если ссылка
+        if isinstance(image_path, str) and image_path.startswith("http"):
+            await message.answer_photo(photo=image_path, caption=caption)
+        else:
+            photo = types.FSInputFile(image_path)
+            await message.answer_photo(photo=photo, caption=caption)
 
     except Exception as e:
-        print("ERROR:", e)
-        await message.answer("⚠️ Карта не смогла проявиться... Попробуй ещё раз")
+        print("Send error:", e)
+        await message.answer("⚠️ Ошибка отправки карты, попробуй ещё раз")
 
 # fallback
 @dp.message()
 async def fallback(message: types.Message):
     await message.answer("Напиши /card 😎")
 
-# ▶️ запуск
+# запуск
 async def main():
     print("🚀 Бот запущен")
     await dp.start_polling(bot)
