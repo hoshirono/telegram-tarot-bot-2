@@ -30,7 +30,7 @@ RARITY = [
 ]
 
 # 🧠 генерация текста
-async def generate_text(style, rarity):
+def generate_text(style, rarity):
     prompt = f"""
 Ты мистический таролог.
 
@@ -50,7 +50,7 @@ async def generate_text(style, rarity):
 
 
 # 🎨 генерация картинки
-async def generate_image(style, rarity):
+def generate_image(style, rarity):
     prompt = f"{style}, tarot card, {rarity}, mystical, detailed, high quality"
 
     img = client.images.generate(
@@ -77,8 +77,8 @@ async def card(message: types.Message):
     rarity_text, rarity_key = random.choice(RARITY)
 
     # генерим
-    text = await generate_text(style, rarity_text)
-    image_url = await generate_image(style, rarity_key)
+    text = generate_text(style, rarity_text)
+    image_url = generate_image(style, rarity_key)
 
     caption = f"""
 🔮 Твоя карта:
