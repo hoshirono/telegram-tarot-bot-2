@@ -45,9 +45,14 @@ def generate_text(style, rarity):
 # 🎨 генерация картинки (Pollinations)
 def generate_image(style, rarity):
     prompt = f"{style}, {rarity}, tarot card, mystical, detailed, high quality"
-
     url = f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}"
-    return url
+
+    response = requests.get(url, timeout=20)
+
+    with open("card.png", "wb") as f:
+        f.write(response.content)
+
+    return "card.png"
 
 # 🚀 старт
 @dp.message(CommandStart())
@@ -87,4 +92,7 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main())def generate_image(style, rarity):
+    prompt = f"{style}, {rarity}, tarot card, mystical, detailed, high quality"
+    url = f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}"
+    return url
