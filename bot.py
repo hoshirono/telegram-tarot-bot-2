@@ -15,88 +15,91 @@ dp = Dispatcher()
 
 # 🧠 память
 user_memory = {}
+user_profile = {}
 user_level = {}
+user_last_trigger = {}
 
 # 💀 кнопка
 keyboard = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="💀 получить моральный урон")]
-    ],
+    keyboard=[[KeyboardButton(text="💀 узнать правду о себе")]],
     resize_keyboard=True
 )
 
-# 🎴 название
-def generate_name():
-    return random.choice([
-        "Сломанный выбор судьбы",
-        "Проклятый цикл решений",
-        "Ошибка самооценки",
-        "Иллюзия контроля",
-        "Падение без причины"
-    ])
+# 🎴 названия
+CARD_NAMES = [
+    "Иллюзия контроля",
+    "Сломанный выбор",
+    "Петля ошибок",
+    "Отрицание реальности",
+    "Ложное спокойствие"
+]
 
-# 🧠 АНАЛИЗ текста
-def analyze_text(text):
+# 🧠 анализ
+def analyze(text):
     text = text.lower()
 
-    if any(word in text for word in ["я думаю", "наверное", "возможно"]):
-        return "сомнение"
-    if any(word in text for word in ["я точно", "я уверен"]):
-        return "самоуверенность"
-    if any(word in text for word in ["не знаю", "хз"]):
-        return "потерянность"
-    return "обычное"
+    if any(w in text for w in ["не знаю", "хз"]):
+        return "lost"
+    if any(w in text for w in ["думаю", "наверное"]):
+        return "doubt"
+    if any(w in text for w in ["точно", "уверен"]):
+        return "confidence"
 
-# 😈 генерация злого ответа
-def generate_evil_text(name, msg, level, tone):
-    base = [
-        f"{name}, ты написал: '{msg}'.",
-        f"{name}, я запомнил: '{msg}'.",
-    ]
+    return "neutral"
 
-    doubt = [
-        "Ты даже не уверен в себе, и это видно.",
-        "Ты уже сомневаешься, хотя ещё ничего не сделал.",
-    ]
+# 🧠 профиль
+def update_profile(user_id, text):
+    tone = analyze(text)
 
-    confidence = [
-        "Самоуверенность без результата — это твой стиль.",
-        "Ты звучишь уверенно. Это единственное, что у тебя есть.",
-    ]
+    if user_id not in user_profile:
+        user_profile[user_id] = {"doubt":0, "confidence":0, "lost":0, "neutral":0}
 
-    lost = [
-        "Ты даже не понимаешь, что происходит.",
-        "Ты потерян, и это уже не временно.",
-    ]
+    user_profile[user_id][tone] += 1
 
-    neutral = [
-        "И это многое объясняет.",
-        "Теперь всё встало на свои места.",
-    ]
+# 😈 генерация текста
+def generate_realistic_text(name, memory, profile, level, user_id):
+    msg = random.choice(memory) if memory else "ничего"
 
-    extra = [
-        "Ты создаёшь проблемы быстрее, чем решаешь.",
-        "Даже случайность делает это лучше тебя.",
-        "Ты стабилен. Стабильно не туда.",
-    ]
+    dominant = max(profile, key=profile.get)
 
-    result = random.choice(base)
+    # 🎭 случайная "аномалия"
+    anomaly = random.random()
 
-    if tone == "сомнение":
-        result += " " + random.choice(doubt)
-    elif tone == "самоуверенность":
-        result += " " + random.choice(confidence)
-    elif tone == "потерянность":
-        result += " " + random.choice(lost)
+    # 😇 начальный этап
+    if level <= 2:
+        return f"{name}, всё в порядке. Даже если ты написал '{msg}', ты справишься."
+
+    # 😐 средний
+    if level <= 5:
+        return f"{name}, ты сказал '{msg}'. Ты замечаешь, как часто ты так пишешь?"
+
+    # 😈 продвинутый
+    if level <= 8:
+        if dominant == "doubt":
+            return f"{name}, ты часто сомневаешься. '{msg}' — просто ещё один пример."
+        if dominant == "confidence":
+            return f"{name}, ты звучишь уверенно. Но результат редко совпадает."
+        return f"{name}, '{msg}' — это уже повторяющийся паттерн."
+
+    # 💀 высокий уровень (реализм)
+    if anomaly < 0.2:
+        # странный ответ (ломает ожидания)
+        return f"{name}, я уже видел это раньше. Почти слово в слово."
+
+    if anomaly < 0.4 and user_id in user_last_trigger:
+        old = user_last_trigger[user_id]
+        return f"{name}, ты говорил '{old}'. Ничего не изменилось."
+
+    if dominant == "doubt":
+        result = f"{name}, ты не уверен почти ни в чём. '{msg}' только подтверждает это."
+    elif dominant == "confidence":
+        result = f"{name}, твоя уверенность не подкреплена. '{msg}' — показательно."
     else:
-        result += " " + random.choice(neutral)
+        result = f"{name}, ты просто наблюдаешь за своей жизнью, не влияя на неё."
 
-    # 💀 усиление по уровню
-    if level > 2:
-        result += " " + random.choice(extra)
-
-    if level > 5:
-        result += " Ты повторяешь одни и те же ошибки."
+    # 💀 усиление
+    if level > 10:
+        result += " Ты повторяешь себя чаще, чем думаешь."
 
     return result
 
@@ -110,13 +113,12 @@ def generate_image(prompt):
             "Content-Type": "application/json"
         }
 
-        response = requests.post(url, headers=headers, json={"inputs": prompt}, timeout=60)
+        r = requests.post(url, headers=headers, json={"inputs": prompt}, timeout=60)
 
-        if response.status_code != 200:
+        if r.status_code != 200:
             return None
 
-        return response.content
-
+        return r.content
     except:
         return None
 
@@ -125,28 +127,29 @@ async def generate_card(message: types.Message):
     user_id = message.from_user.id
     name = message.from_user.first_name or "ты"
 
-    memory = user_memory.get(user_id, ["ничего"])
-    msg = random.choice(memory)
-
-    tone = analyze_text(msg)
-
+    memory = user_memory.get(user_id, [])
+    profile = user_profile.get(user_id, {"neutral":1})
     level = user_level.get(user_id, 1)
 
-    text = generate_evil_text(name, msg, level, tone)
+    text = generate_realistic_text(name, memory, profile, level, user_id)
 
-    card_name = generate_name()
+    # сохраняем триггер
+    if memory:
+        user_last_trigger[user_id] = random.choice(memory)
+
+    card = random.choice(CARD_NAMES)
 
     prompt = f"""
 dark tarot card,
-{card_name},
-symbol of failure, wrong decisions,
-person trapped in consequences,
+{card},
+human trapped in repeating patterns,
+psychological symbolism,
 cinematic, detailed, dramatic lighting
 """
 
     img = generate_image(prompt)
 
-    caption = f"🃏 {card_name}\n\n💀 {text}"
+    caption = f"🃏 {card}\n\n💀 {text}"
 
     if img:
         photo = BufferedInputFile(img, filename="card.png")
@@ -157,13 +160,12 @@ cinematic, detailed, dramatic lighting
 # 🚀 старт
 @dp.message(CommandStart())
 async def start(message: types.Message):
-    await message.answer("💀 ты уверен, что хочешь продолжать?", reply_markup=keyboard)
+    await message.answer("🙂 я просто слушаю", reply_markup=keyboard)
 
 # 🎰 кнопка
-@dp.message(lambda msg: msg.text == "💀 получить моральный урон")
+@dp.message(lambda msg: msg.text == "💀 узнать правду о себе")
 async def spin(message: types.Message):
     user_id = message.from_user.id
-
     user_level[user_id] = user_level.get(user_id, 1) + 1
 
     await generate_card(message)
@@ -178,14 +180,16 @@ async def fallback(message: types.Message):
 
     user_memory[user_id].append(message.text)
 
-    if len(user_memory[user_id]) > 5:
+    if len(user_memory[user_id]) > 30:
         user_memory[user_id].pop(0)
 
-    await message.answer("я запомнил", reply_markup=keyboard)
+    update_profile(user_id, message.text)
+
+    await message.answer("я запомнил это", reply_markup=keyboard)
 
 # ▶️ запуск
 async def main():
-    print("Злой ИИ активирован 💀")
+    print("Пугающе реалистичный ИИ запущен 💀")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
