@@ -9,8 +9,8 @@ from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, BufferedInputFile
 from aiogram.enums import ChatAction
 
-TOKEN = "ТВОЙ_ТОКЕН"
-HF_TOKEN = "ТВОЙ_HF_ТОКЕН"
+TOKEN = "8705289370:AAHRSaJFBqQR8qKdX2Z1SiiImKgGUjs3Vew"
+HF_TOKEN = "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"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
