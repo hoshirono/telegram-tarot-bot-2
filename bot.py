@@ -1,16 +1,23 @@
 import asyncio
 import random
 import logging
+import os
 import requests
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.enums import ChatAction
+from dotenv import load_dotenv
 
-# ===================== НАСТРОЙКИ =====================
+# ===================== ENV =====================
 
-TOKEN = "ВСТАВЬ_СЮДА_ТОКЕН"
-UNSPLASH_KEY = "ВСТАВЬ_СЮДА_UNSPLASH_KEY"
+load_dotenv()
+
+TOKEN = os.getenv("TOKEN")
+UNSPLASH_KEY = os.getenv("UNSPLASH_KEY")
+
+if not TOKEN:
+    raise ValueError("❌ TOKEN не найден в .env")
 
 # ===================== ЛОГИ =====================
 
@@ -35,49 +42,37 @@ keyboard = ReplyKeyboardMarkup(
 used_predictions = set()
 user_memory = {}
 
-# ===================== ГЕНЕРАЦИЯ ПРЕДСКАЗАНИЙ =====================
+# ===================== ПРЕДСКАЗАНИЯ =====================
 
 def generate_prediction():
-    subjects = [
-        "Сегодня", "Эта неделя", "Твоя жизнь", "Судьба", "Вселенная"
-    ]
-
-    actions = [
-        "превратится в", "будет выглядеть как", "станет",
-        "скатится в", "окажется"
-    ]
-
+    subjects = ["Сегодня", "Твоя жизнь", "Судьба", "Эта неделя", "Вселенная"]
+    verbs = ["скатится в", "превратится в", "станет", "развалится в"]
     trash = [
-        "бессмысленная хуета",
+        "бессмысленную хуету",
         "цирк долбоебизма",
-        "затянувшийся фейл",
+        "затянувшийся провал",
         "полный пиздец",
-        "дешёвая пародия на успех",
-        "хаос, который ты называешь планом",
-        "медленный краш твоих надежд",
-        "то самое дно, которое ты копаешь дальше"
+        "клоунаду без зрителей",
+        "дно с подвалом",
+        "жалкую попытку быть нормальным"
     ]
-
     endings = [
         "и ты это допустил",
         "и это полностью твоя вина",
-        "но ты сделаешь вид, что всё нормально",
-        "и ты опять ничего не поймёшь",
-        "но ты уже привык к такому",
-        "и да, лучше не станет"
+        "но ты снова сделаешь вид, что всё ок",
+        "и ты даже не поймёшь где сломался",
+        "но ты уже привык к такому"
     ]
-
     sarcasm = [
         "Красавчик.",
         "Стабильность.",
-        "Ну ты даёшь.",
-        "Всё по плану (нет).",
-        "Это уже стиль жизни.",
-        "Прогресс налицо. К сожалению."
+        "Прогресс налицо.",
+        "Это уже талант.",
+        "Продолжай в том же духе (нет)."
     ]
 
     for _ in range(100):
-        text = f"{random.choice(subjects)} {random.choice(actions)} {random.choice(trash)}, {random.choice(endings)}. {random.choice(sarcasm)}"
+        text = f"{random.choice(subjects)} {random.choice(verbs)} {random.choice(trash)}, {random.choice(endings)}. {random.choice(sarcasm)}"
         if text not in used_predictions:
             used_predictions.add(text)
             return text
@@ -87,23 +82,27 @@ def generate_prediction():
 # ===================== КАРТИНКИ =====================
 
 def get_image():
+    if not UNSPLASH_KEY:
+        return None
+
     try:
         url = "https://api.unsplash.com/photos/random"
         headers = {"Authorization": f"Client-ID {UNSPLASH_KEY}"}
 
-        themes = [
-            "creepy face", "liminal space", "weird situation",
-            "dark room", "awkward person", "surreal photo"
+        queries = [
+            "creepy", "weird", "liminal", "dark", "surreal",
+            "awkward", "strange person", "disturbing"
         ]
 
-        params = {"query": random.choice(themes)}
+        params = {"query": random.choice(queries)}
 
         r = requests.get(url, headers=headers, params=params, timeout=10)
 
         if r.status_code == 200:
             return r.json()["urls"]["regular"]
-    except:
-        pass
+
+    except Exception as e:
+        print("Ошибка картинки:", e)
 
     return None
 
@@ -112,7 +111,7 @@ def get_image():
 @dp.message(lambda msg: msg.text == "/start")
 async def start(msg: types.Message):
     await msg.answer(
-        "Я уже здесь.\nНажми кнопку и получи то, что заслужил.",
+        "Я уже здесь.\nНажми кнопку и получи своё.",
         reply_markup=keyboard
     )
 
@@ -136,7 +135,7 @@ async def tarot(msg: types.Message):
     if image_url:
         await msg.answer_photo(photo=image_url, caption=text)
     else:
-        await msg.answer(text + "\n\n(даже картинка отказалась участвовать)")
+        await msg.answer(text + "\n\n(даже интернет не захотел тебе помогать)")
 
 # ===================== ЗАПОМИНАНИЕ =====================
 
@@ -148,7 +147,7 @@ async def remember(msg: types.Message):
 # ===================== ЗАПУСК =====================
 
 async def main():
-    print("Бот запущен")
+    print("✅ Бот запущен")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
