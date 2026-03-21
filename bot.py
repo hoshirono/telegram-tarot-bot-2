@@ -8,27 +8,30 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, BufferedInputFile
 from aiogram.enums import ChatAction
-from aiogram.exceptions import TelegramNetworkError
 
+# 🔑 ВСТАВЬ СЮДА
 TOKEN = "8705289370:AAF14RnDpQIi7SxChdQIpGshbD2iB_G9La0"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-IMAGE_FOLDER = "images"
+# 📁 ПАПКА С КАРТИНКАМИ (ВАЖНО)
+IMAGE_FOLDER = "/app/images"  # для Railway
+# если локально -> "images"
 
 active_users = set()
 last_message_time = {}
 night_sent = {}
 
 keyboard = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text="накаркай, гад🐦‍⬛️")]],
+    keyboard=[[KeyboardButton(text="💀 дай мне кринж-картинку")]],
     resize_keyboard=True
 )
 
-# 🖼 картинки
+# 🖼 получение картинки
 def get_random_image():
     if not os.path.exists(IMAGE_FOLDER):
+        print("❌ папки нет:", IMAGE_FOLDER)
         return None
 
     files = [
@@ -37,6 +40,7 @@ def get_random_image():
     ]
 
     if not files:
+        print("❌ нет файлов в папке")
         return None
 
     path = os.path.join(IMAGE_FOLDER, random.choice(files))
@@ -44,7 +48,8 @@ def get_random_image():
     with open(path, "rb") as f:
         return BufferedInputFile(f.read(), filename="img.jpg")
 
-# 😈 тексты
+
+# 😈 крипота
 def night_text():
     return random.choice([
         "не оборачивайся",
@@ -64,7 +69,8 @@ def random_creepy():
         "интересно, когда ты поймешь"
     ])
 
-# 📸 отправка
+
+# 📸 отправка фото
 async def send_image(message: types.Message):
     await bot.send_chat_action(message.chat.id, ChatAction.TYPING)
     await asyncio.sleep(random.uniform(1, 2))
@@ -74,7 +80,8 @@ async def send_image(message: types.Message):
     if photo:
         await message.answer_photo(photo=photo)
     else:
-        await message.answer("картинок нет. как и смысла")
+        await message.answer("картинки проебались где-то")
+
 
 # 🚀 старт
 @dp.message(CommandStart())
@@ -82,17 +89,19 @@ async def start(message: types.Message):
     active_users.add(message.from_user.id)
 
     await message.answer(
-        "жми кнопку",
+        "жми кнопку и страдай",
         reply_markup=keyboard
     )
 
+
 # 🎰 кнопка
-@dp.message(lambda m: m.text == "💀 дай мне визуальный кринж пожалуйста")
+@dp.message(lambda m: m.text == "накаркай, гад🐦‍⬛️")
 async def spin(message: types.Message):
     active_users.add(message.from_user.id)
     await send_image(message)
 
-# 👁 watcher
+
+# 👁 авто-писанина
 async def watcher():
     while True:
         await asyncio.sleep(60)
@@ -104,7 +113,7 @@ async def watcher():
             current_time = time.time()
             last = last_message_time.get(user_id, 0)
 
-            # 🌙 ночь
+            # 🌙 НОЧЬ (2-5)
             if 2 <= hour <= 5:
                 key = f"{user_id}_{now.date()}"
 
@@ -116,7 +125,7 @@ async def watcher():
                         pass
                 continue
 
-            # 🤡 редко пишет
+            # ☠️ не чаще 2 раз в день
             if current_time - last < 43200:
                 continue
 
@@ -126,7 +135,8 @@ async def watcher():
             except:
                 pass
 
-# 🔥 СУПЕР-ФИКС ЗАПУСКА
+
+# 🔥 ГЛАВНЫЙ ФИКС
 async def main():
     print("бот запущен")
 
@@ -135,16 +145,13 @@ async def main():
 
     asyncio.create_task(watcher())
 
-    # 🔁 вечный перезапуск polling при конфликте
     while True:
         try:
             await dp.start_polling(bot)
-        except TelegramNetworkError as e:
-            print("перезапуск polling...", e)
-            await asyncio.sleep(3)
         except Exception as e:
-            print("ошибка:", e)
-            await asyncio.sleep(5)
+            print("перезапуск из-за ошибки:", e)
+            await asyncio.sleep(3)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
