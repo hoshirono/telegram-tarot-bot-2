@@ -1,111 +1,100 @@
 import asyncio
 import random
 import os
-import json
-
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from dotenv import load_dotenv
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-load_dotenv()
-
+# 🔑 токен
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 
-# 📁 файл коллекции
-COLLECTION_FILE = "collection.json"
-
-# 🎮 кнопки
-kb = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="🔮 Получить карту")],
-        [KeyboardButton(text="📦 Моя коллекция")]
-    ],
-    resize_keyboard=True
-)
-
 # 🎨 стили
 STYLES = [
-    "dark tarot",
+    "dark gothic tarot",
     "cute anime tarot",
     "absurd meme tarot",
     "psychedelic cursed tarot",
-    "low quality meme tarot"
+    "low budget cursed png tarot",
 ]
 
-# 💎 редкость (с шансами)
-def get_rarity():
-    roll = random.randint(1, 100)
-    if roll <= 70:
-        return ("обычная карта", "soft tarot")
-    elif roll <= 95:
-        return ("редкая карта", "glowing detailed tarot")
-    else:
-        return ("ПРОКЛЯТАЯ 😈", "horror cursed demonic tarot")
+# 💎 редкость
+RARITY = [
+    ("обычная карта", "common"),
+    ("редкая карта", "rare"),
+    ("легендарная 💀", "legendary"),
+    ("проклятая 😈", "cursed"),
+]
 
-# 🃏 названия карт
+# 🃏 абсурдные карты
 CARDS = [
-    "Сигма Жабий Император",
-    "Плачущий Хлеб",
-    "Демон Wi-Fi",
-    "Картофель Судьбы",
-    "Кот с налогами",
-    "Гигачад Пророк",
-    "Проклятый Хомяк",
-    "Скелет на зарплате",
-    "Пельмень Вечности"
+    "Король Сломанных Wi-Fi",
+    "Туз Кринжа",
+    "Жрица Неловкого Молчания",
+    "Рыцарь Просроченных Дедлайнов",
+    "Дьявол Лени",
+    "Колесо Непонятно Чего",
+    "Башня, которая просто упала",
+    "Император Без Штанов",
+    "Маг Потерянных Носков",
+    "Смерть, но ты уже привык",
 ]
 
-# 🧠 предсказания (абсурд)
+# 🧠 ЖЕСТКИЕ ПРЕДСКАЗАНИЯ
 PREDICTIONS = [
-    "Ты скоро найдешь деньги… но это будет 47 рублей и чек из магнита.",
-    "Судьба говорит: иди спать, ты уже натворил достаточно.",
-    "Кто-то думает о тебе. Возможно налоговая.",
-    "Ты избран… но для чего — никто не знает.",
-    "Не доверяй человеку с энергетиком в 3 ночи.",
-    "Скоро произойдет херня. Будь готов.",
-    "Ты на правильном пути. Просто путь — говно.",
-    "В твоей жизни появится кот. Или проблема. Или оба.",
-    "Судьба шепчет: 'ну ты и долбоеб конечно'",
-    "Ты станешь легендой… в очень узком кругу людей."
+    "Сегодня ты снова обосрёшься, но уже морально.",
+    "Вселенная намекает: пора перестать быть долбоёбом.",
+    "Ты на верном пути... но путь ведёт в жопу.",
+    "Скоро будет шанс — и ты его, конечно, просрёшь.",
+    "Твоя удача: 1/10, но зато стабильно.",
+    "Сегодня можно всё. Даже позориться.",
+    "Карта говорит: хватит страдать хуйнёй.",
+    "Ты главный герой… но комедии.",
+    "Всё будет нормально. Наверное. Нет.",
+    "Ты думаешь это знак? Да. Плохой.",
 ]
 
-# 🎨 генерация картинки
-def generate_image(style, rarity, card_name):
-    prompt = f"{style}, {rarity}, tarot card of {card_name}, absurd, detailed, mystical"
-    return f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}"
+# 📚 коллекция пользователей
+user_cards = {}
 
-# 💾 загрузка коллекции
-def load_collection():
-    if not os.path.exists(COLLECTION_FILE):
-        return {}
-    with open(COLLECTION_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
 
-# 💾 сохранение
-def save_collection(data):
-    with open(COLLECTION_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+# 🔘 клавиатура
+def get_keyboard():
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔮 Получить карту", callback_data="card")],
+        [InlineKeyboardButton(text="📚 Моя коллекция", callback_data="collection")]
+    ])
+    return kb
+
 
 # 🚀 старт
 @dp.message(CommandStart())
 async def start(message: types.Message):
-    await message.answer("🔮 Добро пожаловать в таро безумия", reply_markup=kb)
+    await message.answer(
+        "🔮 Добро пожаловать в самый ебанутый таро-бот\n\nЖми кнопку 👇",
+        reply_markup=get_keyboard()
+    )
 
-# 🔮 получить карту
-@dp.message(lambda m: m.text == "🔮 Получить карту")
-async def card(message: types.Message):
-    await message.answer("🔮 Генерирую карту...")
+
+# 🎴 генерация карты
+async def generate_card():
+    await asyncio.sleep(1)  # имитация генерации
 
     style = random.choice(STYLES)
-    rarity_text, rarity_prompt = get_rarity()
+    rarity_text, _ = random.choice(RARITY)
     card_name = random.choice(CARDS)
-    text = random.choice(PREDICTIONS)
+    prediction = random.choice(PREDICTIONS)
 
-    image_url = generate_image(style, rarity_prompt, card_name)
+    # 🖼️ простые картинки (чтобы не зависало)
+    images = [
+        "https://picsum.photos/400/600",
+        "https://placekitten.com/400/600",
+        "https://placebear.com/400/600"
+    ]
+
+    image = random.choice(images)
 
     caption = f"""
 🃏 {card_name}
@@ -113,55 +102,62 @@ async def card(message: types.Message):
 🎨 Стиль: {style}
 💎 Редкость: {rarity_text}
 
-🧠 {text}
+🔮 {prediction}
 """
 
+    return image, caption, card_name
+
+
+# 🎴 кнопка "получить карту"
+@dp.callback_query(lambda c: c.data == "card")
+async def card_callback(callback: types.CallbackQuery):
+    await callback.message.answer("🔮 Генерирую твою ебанутую судьбу...")
+
     try:
-        await message.answer_photo(photo=image_url, caption=caption)
+        image, caption, card_name = await asyncio.wait_for(generate_card(), timeout=10)
+
+        # сохраняем в коллекцию
+        user_id = callback.from_user.id
+        if user_id not in user_cards:
+            user_cards[user_id] = []
+
+        user_cards[user_id].append(card_name)
+
+        await callback.message.answer_photo(photo=image, caption=caption)
+
     except:
-        await message.answer("⚠️ Не удалось загрузить картинку, но вот твоя карта:")
-        await message.answer(caption)
+        await callback.message.answer("💀 Карта ушла в астрал... попробуй ещё раз")
 
-    # сохраняем
-    user_id = str(message.from_user.id)
-    data = load_collection()
 
-    if user_id not in data:
-        data[user_id] = []
+# 📚 коллекция
+@dp.callback_query(lambda c: c.data == "collection")
+async def collection_callback(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
 
-    data[user_id].append({
-        "name": card_name,
-        "rarity": rarity_text
-    })
+    cards = user_cards.get(user_id, [])
 
-    save_collection(data)
-
-# 📦 коллекция
-@dp.message(lambda m: m.text == "📦 Моя коллекция")
-async def collection(message: types.Message):
-    data = load_collection()
-    user_id = str(message.from_user.id)
-
-    if user_id not in data or not data[user_id]:
-        await message.answer("📭 У тебя пока нет карт")
+    if not cards:
+        await callback.message.answer("📚 У тебя пока нихуя нет")
         return
 
-    text = "📦 Твоя коллекция:\n\n"
+    text = "📚 Твоя коллекция:\n\n"
+    for c in cards:
+        text += f"• {c}\n"
 
-    for card in data[user_id][-10:]:
-        text += f"🃏 {card['name']} — {card['rarity']}\n"
+    await callback.message.answer(text)
 
-    await message.answer(text)
 
-# fallback
+# 🧪 fallback
 @dp.message()
 async def fallback(message: types.Message):
-    await message.answer("Жми кнопки 👇", reply_markup=kb)
+    await message.answer("Жми кнопки, не тупи 👇", reply_markup=get_keyboard())
 
-# запуск
+
+# ▶️ запуск
 async def main():
-    print("🚀 Бот запущен")
+    print("Бот запущен 💀")
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
