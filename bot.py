@@ -14,40 +14,54 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 
-# 🧠 использованные карты (чтобы не повторялись)
-used_cards = set()
+# 🧠 память (чтобы не повторялось)
+used = set()
 
-# 💎 редкость
-RARITY = [
-    "обычная",
-    "редкая",
-    "легендарная",
-    "проклятая 😈"
-]
+# 🎮 кнопки
+def keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🎰 КРУТИТЬ КРИНЖ")]
+        ],
+        resize_keyboard=True
+    )
 
-# 🎴 пул карт (абсурд + жестко)
-CARD_POOL = [
-    ("Бог кредитов", "Ты продал душу за рассрочку и даже не заметил."),
-    ("Пельмень-оракул", "Твоя судьба кипит в кастрюле, и крышка уже дрожит."),
-    ("Wi-Fi демон", "Ты завис между мирами, как слабый сигнал."),
-    ("Скелет на удалёнке", "Ты мёртв внутри, но продолжаешь работать."),
-    ("Глаз налоговой", "Ты думаешь, что спрятался. Это мило."),
-    ("Король кринжа", "Ты стал тем, над кем смеялся."),
-    ("404 пророк", "Твоё будущее не найдено."),
-    ("Кринжовый ангел", "Даже небеса разочарованы в тебе."),
-    ("Шаман подписок", "Ты платишь за то, чем не пользуешься."),
-    ("Демон дедлайна", "Он уже здесь. И ты не успеешь."),
-]
+# 💀 генерация названия
+def generate_name():
+    words1 = ["Цифровой", "Проклятый", "Кринжовый", "Гнилой", "Wi-Fi", "Космический", "Депрессивный", "Сломанный"]
+    words2 = ["пельмень", "демон", "пророк", "дедлайн", "шаман", "бот", "кредит", "скелет"]
+    words3 = ["судьбы", "хаоса", "позора", "интернета", "разложения", "вечности"]
+
+    return f"{random.choice(words1)} {random.choice(words2)} {random.choice(words3)}"
+
+# 🤡 генерация предсказания (максимальный кринж)
+def generate_text():
+    texts = [
+        "Ты опять сделал всё неправильно. И да, все это видели.",
+        "Судьба кричит тебе 'остановись', но ты уже купил подписку.",
+        "Ты не главный герой. Ты тот самый NPC с багом.",
+        "Ты выбрал путь... и это был худший из всех.",
+        "Даже рандом был против тебя.",
+        "Ты не проиграл. Ты унизился.",
+        "Вселенная устала от тебя раньше, чем ты от неё.",
+        "Это не дно. Это поддно.",
+        "Ты сейчас там, где даже судьба не ожидала тебя увидеть.",
+        "Твоя энергия: забытый пароль от жизни."
+    ]
+    return random.choice(texts)
 
 # 🎴 генерация уникальной карты
 def generate_card():
     while True:
-        card = random.choice(CARD_POOL)
-        if card[0] not in used_cards:
-            used_cards.add(card[0])
-            return card
+        name = generate_name()
+        text = generate_text()
+        key = name + text
 
-# 🎨 генерация картинки (НОВЫЙ API HuggingFace)
+        if key not in used:
+            used.add(key)
+            return name, text
+
+# 🎨 генерация картинки
 def generate_image(name, desc):
     API_URL = "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0"
 
@@ -58,28 +72,26 @@ def generate_image(name, desc):
     prompt = f"""
 Tarot card illustration.
 
-Card title: "{name}"
+Card title: {name}
 
 Scene:
+A surreal absurd scene that represents:
 {desc}
 
-Visual requirements:
-- surreal absurd scene
-- exaggerated emotions
-- symbolic composition
-- character representing the meaning
-- dark humor
-- slightly humiliating tone (funny)
-- grotesque absurd elements
+Style:
+- extremely absurd
 - cursed meme energy
-- detailed tarot card frame
-- centered composition
-- dramatic lighting
-- masterpiece, highly detailed
+- grotesque humor
+- dramatic composition
+- tarot card frame
+- exaggerated emotions
+- weird symbols
+- dark humor
+- slightly humiliating
 
 IMPORTANT:
-- image MUST match the meaning
-- no random objects
+- image MUST reflect meaning
+- no random animals
 - clear concept
 """
 
@@ -98,68 +110,35 @@ IMPORTANT:
 
     return response.content
 
-# 🎮 клавиатура
-def main_keyboard():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="🎰 Крутить")],
-            [KeyboardButton(text="📦 Коллекция"), KeyboardButton(text="📊 Стата")]
-        ],
-        resize_keyboard=True
-    )
-
 # 🚀 старт
 @dp.message(CommandStart())
 async def start(message: types.Message):
-    await message.answer(
-        "💀 ULTIMATE TAROT\n\nЖми 🎰 Крутить и получи свою судьбу",
-        reply_markup=main_keyboard()
-    )
+    await message.answer("💀 CRINGE TAROT\n\nЖми кнопку", reply_markup=keyboard())
 
-# 🎴 генерация карты
-@dp.message(lambda m: m.text == "🎰 Крутить")
+# 🎰 кнопка
+@dp.message(lambda m: m.text == "🎰 КРУТИТЬ КРИНЖ")
 async def spin(message: types.Message):
-    await message.answer("🎨 Генерирую карту...")
+    await message.answer("🎨 Генерирую максимальный кринж...")
 
-    name, desc = generate_card()
-    rarity = random.choice(RARITY)
+    name, text = generate_card()
 
     try:
-        img_bytes = generate_image(name, desc)
-        photo = BufferedInputFile(img_bytes, filename="card.png")
+        img = generate_image(name, text)
+        photo = BufferedInputFile(img, filename="card.png")
 
-        caption = f"""
-🃏 {name}
-
-💎 {rarity}
-
-🔮 {desc}
-"""
-
-        await message.answer_photo(photo=photo, caption=caption)
+        await message.answer_photo(
+            photo=photo,
+            caption=f"🃏 {name}\n\n🤡 {text}"
+        )
 
     except Exception as e:
-        print("ERROR:", e)
-        await message.answer("⚠️ не удалось сгенерировать арт (попробуй ещё раз)")
-
-# 📦 коллекция (пока заглушка)
-@dp.message(lambda m: m.text == "📦 Коллекция")
-async def collection(message: types.Message):
-    if not used_cards:
-        await message.answer("У тебя пока нет карт")
-    else:
-        cards = "\n".join(used_cards)
-        await message.answer(f"📦 Твои карты:\n\n{cards}")
-
-# 📊 стата (заглушка)
-@dp.message(lambda m: m.text == "📊 Стата")
-async def stats(message: types.Message):
-    await message.answer(f"📊 Открыто карт: {len(used_cards)}")
+        print(e)
+        await message.answer("⚠️ даже кринж не смог родиться... попробуй ещё")
 
 # fallback
 @dp.message()
 async def fallback(message: types.Message):
-    await message.answer("Жми 🎰 Крутить")
+    await message.answer("Жми кнопку ↓", reply_markup=keyboard())
 
 # ▶️ запуск
 async def main():
