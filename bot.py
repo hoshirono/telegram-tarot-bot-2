@@ -1,153 +1,130 @@
 import asyncio
 import random
-import logging
-import os
 import requests
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from aiogram.enums import ChatAction
-from dotenv import load_dotenv
 
-# ===================== ENV =====================
-
-load_dotenv()
-
-TOKEN = os.getenv("TOKEN")
-UNSPLASH_KEY = os.getenv("UNSPLASH_KEY")
-
-if not TOKEN:
-    raise ValueError("❌ TOKEN не найден в .env")
-
-# ===================== ЛОГИ =====================
-
-logging.basicConfig(level=logging.INFO)
-
-# ===================== БОТ =====================
+# ======================
+# 🔑 ВСТАВЬ СЮДА
+# ======================
+TOKEN = "8705289370:AAGPqjd8uNsnyr04zCM0S3pOjo1jLUSW0vg"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# ===================== КНОПКА =====================
-
-keyboard = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="💀 Дай мне судьбу")]
-    ],
-    resize_keyboard=True
-)
-
-# ===================== ПАМЯТЬ =====================
-
-used_predictions = set()
+# ======================
+# 🧠 ПАМЯТЬ
+# ======================
 user_memory = {}
 
-# ===================== ПРЕДСКАЗАНИЯ =====================
+# ======================
+# 🔘 КНОПКА
+# ======================
+def get_keyboard():
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add(KeyboardButton("💀 Получить судьбу"))
+    return kb
 
-def generate_prediction():
-    subjects = ["Сегодня", "Твоя жизнь", "Судьба", "Эта неделя", "Вселенная"]
-    verbs = ["скатится в", "превратится в", "станет", "развалится в"]
-    trash = [
-        "бессмысленную хуету",
-        "цирк долбоебизма",
-        "затянувшийся провал",
-        "полный пиздец",
-        "клоунаду без зрителей",
-        "дно с подвалом",
-        "жалкую попытку быть нормальным"
+# ======================
+# 🖼️ ГЕНЕРАЦИЯ ФОТО (БЕЗ API)
+# ======================
+def get_cursed_image():
+    themes = [
+        "weird face close up",
+        "distorted human body",
+        "liminal space empty room",
+        "strange creepy object",
+        "weird food disgusting",
+        "ugly animal close up",
+        "blurry shadow figure",
+        "abandoned building creepy",
+        "strange mannequin",
+        "distorted selfie"
     ]
+    theme = random.choice(themes)
+    return f"https://source.unsplash.com/800x800/?{theme}"
+
+# ======================
+# 🔮 ГЕНЕРАЦИЯ ПРЕДСКАЗАНИЯ
+# ======================
+def generate_prediction(user_text=None):
+    insults = [
+        "гений без шансов",
+        "человек-ошибка",
+        "недоразумение с Wi-Fi",
+        "случайный баг реальности",
+        "побочный квест без награды",
+        "живое разочарование"
+    ]
+
+    events = [
+        "ты опять облажаешься",
+        "все пойдет странно и криво",
+        "кто-то будет тебя терпеть из жалости",
+        "ты снова выберешь худший вариант",
+        "вселенная слегка над тобой посмеётся",
+        "реальность даст тебе пощёчину"
+    ]
+
     endings = [
-        "и ты это допустил",
-        "и это полностью твоя вина",
-        "но ты снова сделаешь вид, что всё ок",
-        "и ты даже не поймёшь где сломался",
-        "но ты уже привык к такому"
-    ]
-    sarcasm = [
-        "Красавчик.",
-        "Стабильность.",
-        "Прогресс налицо.",
-        "Это уже талант.",
-        "Продолжай в том же духе (нет)."
+        "и ты сделаешь вид что так и было задумано",
+        "но ты всё равно ничего не поймёшь",
+        "и это будет даже не самый худший исход",
+        "но ты опять не сделаешь выводов",
+        "и да, это только начало",
+        "но ты продолжишь в том же духе"
     ]
 
-    for _ in range(100):
-        text = f"{random.choice(subjects)} {random.choice(verbs)} {random.choice(trash)}, {random.choice(endings)}. {random.choice(sarcasm)}"
-        if text not in used_predictions:
-            used_predictions.add(text)
-            return text
+    insult = random.choice(insults)
+    event = random.choice(events)
+    ending = random.choice(endings)
 
-    return "Даже судьба устала тебя генерировать."
+    if user_text:
+        return f"Ты писал: '{user_text[:20]}...' — и это многое объясняет.\n\nСегодня ты, {insult}, {event}, {ending}."
+    else:
+        return f"Сегодня ты, {insult}, {event}, {ending}."
 
-# ===================== КАРТИНКИ =====================
-
-def get_image():
-    if not UNSPLASH_KEY:
-        return None
-
-    try:
-        url = "https://api.unsplash.com/photos/random"
-        headers = {"Authorization": f"Client-ID {UNSPLASH_KEY}"}
-
-        queries = [
-            "creepy", "weird", "liminal", "dark", "surreal",
-            "awkward", "strange person", "disturbing"
-        ]
-
-        params = {"query": random.choice(queries)}
-
-        r = requests.get(url, headers=headers, params=params, timeout=10)
-
-        if r.status_code == 200:
-            return r.json()["urls"]["regular"]
-
-    except Exception as e:
-        print("Ошибка картинки:", e)
-
-    return None
-
-# ===================== СТАРТ =====================
-
+# ======================
+# 🚀 СТАРТ
+# ======================
 @dp.message(lambda msg: msg.text == "/start")
 async def start(msg: types.Message):
     await msg.answer(
-        "Я уже здесь.\nНажми кнопку и получи своё.",
-        reply_markup=keyboard
+        "О, ты вернулся. Не знаю зачем, но ладно.\nЖми кнопку и страдай.",
+        reply_markup=get_keyboard()
     )
 
-# ===================== КНОПКА =====================
+# ======================
+# 💀 КНОПКА
+# ======================
+@dp.message(lambda msg: msg.text == "💀 Получить судьбу")
+async def get_fate(msg: types.Message):
+    await msg.answer("...смотрю в твою жалкую судьбу...")
 
-@dp.message(lambda msg: "судьбу" in msg.text.lower())
-async def tarot(msg: types.Message):
-    await bot.send_chat_action(msg.chat.id, ChatAction.TYPING)
-    await asyncio.sleep(1.5)
+    await bot.send_chat_action(msg.chat.id, "typing")
+    await asyncio.sleep(2)
 
-    prediction = generate_prediction()
+    image_url = get_cursed_image()
+    memory = user_memory.get(msg.from_user.id)
 
-    insult = ""
-    if msg.from_user.id in user_memory:
-        insult = f"\n\nТы же писал: \"{user_memory[msg.from_user.id]}\". Это многое объясняет."
+    text = generate_prediction(memory)
 
-    text = f"🔮 {prediction}{insult}"
+    await msg.answer_photo(photo=image_url, caption=text)
 
-    image_url = get_image()
-
-    if image_url:
-        await msg.answer_photo(photo=image_url, caption=text)
-    else:
-        await msg.answer(text + "\n\n(даже интернет не захотел тебе помогать)")
-
-# ===================== ЗАПОМИНАНИЕ =====================
-
+# ======================
+# 🧠 ЗАПОМИНАНИЕ
+# ======================
 @dp.message()
 async def remember(msg: types.Message):
-    if "судьбу" not in msg.text.lower():
-        user_memory[msg.from_user.id] = msg.text[:100]
+    user_memory[msg.from_user.id] = msg.text
+    await msg.answer("Запомнил. Зря ты это написал.")
 
-# ===================== ЗАПУСК =====================
-
+# ======================
+# ▶️ ЗАПУСК
+# ======================
 async def main():
-    print("✅ Бот запущен")
+    print("Бот запущен 💀")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
