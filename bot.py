@@ -3,27 +3,22 @@ import random
 import os
 import requests
 import time
+from io import BytesIO
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, FSInputFile
+from aiogram.enums import ChatAction
 
 # 🔑 токены
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 UNSPLASH_KEY = os.getenv("UNSPLASH_KEY")
-
-if not TOKEN:
-    raise Exception("❌ TELEGRAM_TOKEN не найден")
-
-if not UNSPLASH_KEY:
-    raise Exception("❌ UNSPLASH_KEY не найден")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 # 👁 память
 user_memory = {}
-user_profile = {}
 user_level = {}
 user_last_seen = {}
 active_users = set()
@@ -34,20 +29,17 @@ keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# 📸 поисковые запросы (максимально криповые)
+# 📸 запросы
 PHOTO_QUERIES = [
-    "creepy person in dark",
+    "creepy person dark",
     "abandoned hospital horror",
-    "man staring in darkness",
     "disturbing empty room",
     "shadow figure night",
-    "lonely street night fog",
-    "weird unsettling portrait",
-    "creepy corridor horror"
+    "lonely street fog",
 ]
 
-# 📸 получение фото
-def get_photo():
+# 📸 получить фото (теперь байты)
+def get_photo_bytes():
     url = "https://api.unsplash.com/photos/random"
 
     headers = {
@@ -62,20 +54,14 @@ def get_photo():
     try:
         r = requests.get(url, headers=headers, params=params, timeout=10)
         if r.status_code == 200:
-            return r.json()["urls"]["regular"]
+            img_url = r.json()["urls"]["regular"]
+
+            img = requests.get(img_url, timeout=10)
+            return BytesIO(img.content)
     except:
         return None
 
     return None
-
-# 🧠 анализ
-def analyze(text):
-    text = text.lower()
-    if "не знаю" in text or "хз" in text:
-        return "weak"
-    if "уверен" in text or "точно" in text:
-        return "ego"
-    return "neutral"
 
 # 👁 слежка
 def observer(user_id):
@@ -95,26 +81,24 @@ def observer(user_id):
 
     return None
 
-# 😈 генерация текста
-def generate_text(name, memory, profile, level):
+# 😈 текст
+def generate_text(name, memory, level):
     last = memory[-1] if memory else "ничего"
 
     if level <= 2:
-        return f"{name}, всё будет нормально. наверное."
+        return f"{name}, всё будет нормально"
 
     if level <= 5:
-        return f"{name}, ты написал '{last}'. звучит неуверенно."
+        return f"{name}, '{last}' звучит сомнительно"
 
     if level <= 8:
-        return f"{name}, '{last}' — и ты думаешь это хорошая идея?"
+        return f"{name}, ты реально написал '{last}'?"
 
-    # ЖЁСТКИЙ режим
     return random.choice([
-        f"{name}, ты реально думаешь, что '{last}' — это норм?",
-        f"{name}, это выглядит жалко. особенно '{last}'",
-        f"{name}, ты сам веришь в эту чушь: '{last}'?",
-        f"{name}, чем больше ты пишешь, тем хуже выглядит ситуация",
-        f"{name}, ты даже не понимаешь насколько это плохо"
+        f"{name}, это выглядит жалко",
+        f"{name}, ты сам веришь в это?",
+        f"{name}, становится только хуже",
+        f"{name}, ты даже не понимаешь",
     ])
 
 # 🎴 генерация
@@ -123,20 +107,25 @@ async def generate_card(message: types.Message):
     name = message.from_user.first_name or "ты"
 
     memory = user_memory.get(user_id, [])
-    profile = user_profile.get(user_id, {})
     level = user_level.get(user_id, 1)
 
-    base = generate_text(name, memory, profile, level)
+    # ⏳ эффект "печатает"
+    await bot.send_chat_action(message.chat.id, ChatAction.TYPING)
+    await asyncio.sleep(random.uniform(1.5, 3.5))
+
+    text = generate_text(name, memory, level)
     obs = observer(user_id)
 
-    text = f"{obs}. {base}" if obs else base
+    if obs:
+        text = f"{obs}. {text}"
 
-    photo = get_photo()
+    img_bytes = get_photo_bytes()
 
-    if photo:
-        await message.answer_photo(photo=photo, caption=f"💀 {text}")
+    if img_bytes:
+        img_bytes.name = "photo.jpg"
+        await message.answer_photo(photo=img_bytes, caption=f"💀 {text}")
     else:
-        await message.answer(f"💀 {text}")
+        await message.answer(f"💀 {text} (сегодня без картинки)")
 
 # 🚀 старт
 @dp.message(CommandStart())
@@ -172,7 +161,7 @@ async def memory_handler(message: types.Message):
 
     await message.answer("я это запомнил", reply_markup=keyboard)
 
-# 👁 инициатива бота
+# 👁 инициатива
 async def watcher():
     while True:
         await asyncio.sleep(random.randint(60, 180))
@@ -187,7 +176,6 @@ async def watcher():
             "я думаю о тебе",
             "ты не закончил",
             "это всё ещё с тобой",
-            "ты правда думаешь, что всё нормально?",
             "я помню, что ты писал"
         ])
 
