@@ -7,20 +7,17 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, BufferedInputFile
 
-# 🔑 переменные
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 HF_TOKEN = os.getenv("HF_TOKEN")
-
-if not TOKEN:
-    raise Exception("❌ TELEGRAM_TOKEN не найден")
-
-if not HF_TOKEN:
-    raise Exception("❌ HF_TOKEN не найден")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# 💀 ОДНА КНОПКА (кринж)
+# 🧠 память
+user_memory = {}
+user_level = {}
+
+# 💀 кнопка
 keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="💀 получить моральный урон")]
@@ -28,37 +25,80 @@ keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# 💀 генерация названия
+# 🎴 название
 def generate_name():
-    a = ["Обоссанный", "Кринжовый", "Депрессивный", "Позорный", "Wi-Fi", "Бомжовый"]
-    b = ["пельмень", "батя", "кредит", "сервер", "мозг", "ноутбук"]
-    c = ["судьбы", "позора", "ошибки", "страдания", "провала"]
+    return random.choice([
+        "Сломанный выбор судьбы",
+        "Проклятый цикл решений",
+        "Ошибка самооценки",
+        "Иллюзия контроля",
+        "Падение без причины"
+    ])
 
-    return f"{random.choice(a)} {random.choice(b)} {random.choice(c)}"
+# 🧠 АНАЛИЗ текста
+def analyze_text(text):
+    text = text.lower()
 
-# 💀 предсказания
-PREDICTIONS = [
-    "Ты снова всё просрал, но хотя бы стабилен.",
-    "Даже случайность работает лучше тебя.",
-    "Ты — ошибка, которую даже баг-репорт не спасёт.",
-    "Судьба плюнула в тебя и пошла дальше.",
-    "Ты идёшь к успеху, но в противоположную сторону.",
-    "Ты уже проиграл, просто ещё не понял.",
-    "Ты главный NPC своей жизни.",
-    "Ты — баг, который не фиксится.",
-    "С каждым выбором ты открываешь новое дно.",
-    "Ты стал мемом, но никто не смеётся."
-]
+    if any(word in text for word in ["я думаю", "наверное", "возможно"]):
+        return "сомнение"
+    if any(word in text for word in ["я точно", "я уверен"]):
+        return "самоуверенность"
+    if any(word in text for word in ["не знаю", "хз"]):
+        return "потерянность"
+    return "обычное"
 
-# 🤡 сцены
-EXTRA_SCENES = [
-    "man crying in toilet",
-    "broken computer screaming",
-    "fat angel eating noodles",
-    "sad clown with wifi signal",
-    "man hugging router",
-    "skeleton using laptop"
-]
+# 😈 генерация злого ответа
+def generate_evil_text(name, msg, level, tone):
+    base = [
+        f"{name}, ты написал: '{msg}'.",
+        f"{name}, я запомнил: '{msg}'.",
+    ]
+
+    doubt = [
+        "Ты даже не уверен в себе, и это видно.",
+        "Ты уже сомневаешься, хотя ещё ничего не сделал.",
+    ]
+
+    confidence = [
+        "Самоуверенность без результата — это твой стиль.",
+        "Ты звучишь уверенно. Это единственное, что у тебя есть.",
+    ]
+
+    lost = [
+        "Ты даже не понимаешь, что происходит.",
+        "Ты потерян, и это уже не временно.",
+    ]
+
+    neutral = [
+        "И это многое объясняет.",
+        "Теперь всё встало на свои места.",
+    ]
+
+    extra = [
+        "Ты создаёшь проблемы быстрее, чем решаешь.",
+        "Даже случайность делает это лучше тебя.",
+        "Ты стабилен. Стабильно не туда.",
+    ]
+
+    result = random.choice(base)
+
+    if tone == "сомнение":
+        result += " " + random.choice(doubt)
+    elif tone == "самоуверенность":
+        result += " " + random.choice(confidence)
+    elif tone == "потерянность":
+        result += " " + random.choice(lost)
+    else:
+        result += " " + random.choice(neutral)
+
+    # 💀 усиление по уровню
+    if level > 2:
+        result += " " + random.choice(extra)
+
+    if level > 5:
+        result += " Ты повторяешь одни и те же ошибки."
+
+    return result
 
 # 🎨 генерация картинки
 def generate_image(prompt):
@@ -70,71 +110,82 @@ def generate_image(prompt):
             "Content-Type": "application/json"
         }
 
-        payload = {"inputs": prompt}
-
-        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        response = requests.post(url, headers=headers, json={"inputs": prompt}, timeout=60)
 
         if response.status_code != 200:
-            print("HF ERROR:", response.text)
             return None
 
         return response.content
 
-    except Exception as e:
-        print("CRASH:", e)
+    except:
         return None
 
-# 🎴 генерация карты
+# 🎴 карта
 async def generate_card(message: types.Message):
-    await message.answer("🎨 сейчас тебе станет хуже...")
+    user_id = message.from_user.id
+    name = message.from_user.first_name or "ты"
 
-    name = generate_name()
-    prediction = random.choice(PREDICTIONS)
-    extra = random.choice(EXTRA_SCENES)
+    memory = user_memory.get(user_id, ["ничего"])
+    msg = random.choice(memory)
+
+    tone = analyze_text(msg)
+
+    level = user_level.get(user_id, 1)
+
+    text = generate_evil_text(name, msg, level, tone)
+
+    card_name = generate_name()
 
     prompt = f"""
-absurd surreal tarot card, cursed image,
-{name},
-meaning: {prediction},
-scene: {extra},
-grotesque, glitchcore, weird anatomy,
-highly detailed, dramatic lighting
+dark tarot card,
+{card_name},
+symbol of failure, wrong decisions,
+person trapped in consequences,
+cinematic, detailed, dramatic lighting
 """
 
     img = generate_image(prompt)
 
-    caption = f"🃏 {name}\n\n💀 {prediction}"
+    caption = f"🃏 {card_name}\n\n💀 {text}"
 
     if img:
         photo = BufferedInputFile(img, filename="card.png")
         await message.answer_photo(photo=photo, caption=caption)
     else:
-        await message.answer("⚠ даже нейросеть отказалась это показывать")
+        await message.answer(caption)
 
 # 🚀 старт
 @dp.message(CommandStart())
 async def start(message: types.Message):
-    await message.answer(
-        "💀 добро пожаловать\nты зря сюда зашел",
-        reply_markup=keyboard
-    )
+    await message.answer("💀 ты уверен, что хочешь продолжать?", reply_markup=keyboard)
 
-# 💀 кнопка
+# 🎰 кнопка
 @dp.message(lambda msg: msg.text == "💀 получить моральный урон")
 async def spin(message: types.Message):
+    user_id = message.from_user.id
+
+    user_level[user_id] = user_level.get(user_id, 1) + 1
+
     await generate_card(message)
 
-# 🔥 ВАЖНО: ловим ПЕРВОЕ сообщение
+# 🧠 память
 @dp.message()
 async def fallback(message: types.Message):
-    await message.answer(
-        "нажми кнопку и пожалей об этом",
-        reply_markup=keyboard
-    )
+    user_id = message.from_user.id
+
+    if user_id not in user_memory:
+        user_memory[user_id] = []
+
+    user_memory[user_id].append(message.text)
+
+    if len(user_memory[user_id]) > 5:
+        user_memory[user_id].pop(0)
+
+    await message.answer("я запомнил", reply_markup=keyboard)
 
 # ▶️ запуск
 async def main():
-    print("Бот готов ломать психику 💀")
+    print("Злой ИИ активирован 💀")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
