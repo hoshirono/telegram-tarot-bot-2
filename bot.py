@@ -2,6 +2,7 @@ import asyncio
 import random
 import os
 import requests
+
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, BufferedInputFile
@@ -22,33 +23,53 @@ dp = Dispatcher()
 # 🎮 кнопки
 keyboard = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="🎰 Крутить")],
-        [KeyboardButton(text="⚔ PvP"), KeyboardButton(text="🧬 Синтез")],
-        [KeyboardButton(text="📊 Стата"), KeyboardButton(text="🎁 Дейлик")]
+        [KeyboardButton(text="🎰 Крутить")]
     ],
     resize_keyboard=True
 )
 
 # 💀 генерация названия
 def generate_name():
-    a = ["Проклятый", "Сломанный", "Кринжовый", "Цифровой", "Бесполезный", "Гнилой", "Wi-Fi", "Легендарный"]
-    b = ["хомяк", "кредит", "долг", "батя", "пельмень", "сервер", "бот", "разум"]
-    c = ["судьбы", "позора", "ошибки", "провала", "страдания"]
+    a = ["Обоссанный", "Кринжовый", "Депрессивный", "Цифровой", "Позорный", "Гнилой", "Wi-Fi", "Бомжовый"]
+    b = ["пельмень", "батя", "кредит", "сервер", "хомяк", "мозг", "бот", "ноутбук"]
+    c = ["судьбы", "позора", "ошибки", "страдания", "долга", "провала"]
 
     return f"{random.choice(a)} {random.choice(b)} {random.choice(c)}"
 
-# 🧠 предсказания (жёсткие)
+# 💀 предсказания (макс кринж)
 PREDICTIONS = [
-    "Ты выбрал худший путь, и уже не свернёшь.",
-    "Ты опять всё испортил. Удивительно стабильно.",
-    "Судьба дала шанс, но ты его не понял.",
-    "Ты идёшь вперёд, но в сторону дна.",
-    "Даже этот бот в тебя не верит.",
-    "Ты — главный баг в своей жизни.",
-    "Поздравляю, ты сам себе проблема.",
-    "Станет хуже. Намного хуже.",
-    "Ты уже проиграл, просто ещё не понял.",
-    "Это не знак. Это приговор."
+    "Ты снова всё просрал, но хотя бы стабилен.",
+    "Даже случайность работает лучше тебя.",
+    "Ты — ошибка, которую даже баг-репорт не спасёт.",
+    "Судьба плюнула в тебя и пошла дальше.",
+    "Ты идёшь к успеху, но в противоположную сторону.",
+    "Твоя жизнь — это туториал, который ты не прошёл.",
+    "Ты уже проиграл, просто ещё не осознал масштаб.",
+    "Даже этот бот устал от тебя.",
+    "Ты выбрал путь, но путь не выбрал тебя.",
+    "Поздравляю, ты главный NPC своей жизни.",
+    "Ты настолько лишний, что даже рандом тебя игнорит.",
+    "Тебя не прокляли — ты просто такой.",
+    "Судьба пыталась, но ты сильнее.",
+    "Ты — баг, который не фиксится.",
+    "Тебя даже карма обходит стороной.",
+    "Ты — редкий дроп, но бесполезный.",
+    "Ты внизу, и копаешь ещё глубже.",
+    "С каждым выбором ты открываешь новое дно.",
+    "Ты не провалился — ты провалился красиво.",
+    "Ты стал мемом, но никто не смеётся."
+]
+
+# 🤡 дополнительный абсурд
+EXTRA_SCENES = [
+    "man crying in toilet",
+    "broken computer screaming",
+    "fat angel eating noodles",
+    "sad clown with wifi signal",
+    "man hugging router",
+    "skeleton using laptop",
+    "weird creature in office",
+    "depressed anime boy in supermarket"
 ]
 
 # 🎨 генерация картинки
@@ -79,16 +100,24 @@ def generate_image(prompt):
 
 # 🎴 генерация карты
 async def generate_card(message: types.Message):
-    await message.answer("🎨 Генерирую карту...")
+    await message.answer("🎨 Генерирую кринж-карту...")
 
     name = generate_name()
     prediction = random.choice(PREDICTIONS)
+    extra = random.choice(EXTRA_SCENES)
 
     prompt = f"""
-tarot card, dark fantasy, absurd surreal,
+absurd surreal tarot card, ultra weird, cursed image,
 {name},
-meaning: {prediction},
-highly detailed, dramatic lighting, masterpiece
+visual metaphor: {prediction},
+
+scene: {extra},
+
+grotesque, glitchcore, meme energy,
+distorted anatomy, смешанные объекты,
+uncomfortable, embarrassing, cursed vibe,
+
+highly detailed, cinematic lighting, masterpiece, 4k
 """
 
     img = generate_image(prompt)
@@ -99,26 +128,26 @@ highly detailed, dramatic lighting, masterpiece
         photo = BufferedInputFile(img, filename="card.png")
         await message.answer_photo(photo=photo, caption=caption)
     else:
-        await message.answer("⚠ не удалось сгенерировать арт")
+        await message.answer("⚠ не удалось сгенерировать арт (мир спас тебя от этого ужаса)")
 
 # 🚀 старт
 @dp.message(CommandStart())
 async def start(message: types.Message):
-    await message.answer("💀 ULTIMATE TAROT ONLINE", reply_markup=keyboard)
+    await message.answer("💀 КРИНЖ ТАРО АКТИВИРОВАНО", reply_markup=keyboard)
 
-# 🎰 крутить
+# 🎰 кнопка
 @dp.message(lambda msg: msg.text == "🎰 Крутить")
 async def spin(message: types.Message):
     await generate_card(message)
 
-# 🧪 fallback
+# fallback
 @dp.message()
 async def other(message: types.Message):
     await message.answer("Жми 🎰 Крутить")
 
 # ▶️ запуск
 async def main():
-    print("Бот жив 💀")
+    print("Бот жив и унижает пользователей 💀")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
