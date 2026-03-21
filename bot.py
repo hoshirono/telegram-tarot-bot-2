@@ -1,7 +1,6 @@
 import asyncio
 import random
 import os
-import requests
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
@@ -32,7 +31,7 @@ RARITY = [
     ("проклятая 😈", "dark cursed horror tarot")
 ]
 
-# 🧠 текст (локально)
+# 🧠 текст
 def generate_text():
     texts = [
         "Судьба шепчет: перемены уже рядом.",
@@ -45,38 +44,17 @@ def generate_text():
     ]
     return random.choice(texts)
 
-# 🎨 генерация картинки с fallback
-def generate_image(style, rarity):
+# 🎨 генерация ссылки (без скачивания!)
+def generate_image_url(style, rarity):
     prompt = f"{style}, {rarity}, tarot card, mystical, detailed"
-    url = f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}"
-
-    try:
-        response = requests.get(url, timeout=10)
-
-        if response.status_code == 200:
-            file_path = "card.png"
-            with open(file_path, "wb") as f:
-                f.write(response.content)
-            return file_path
-
-    except Exception as e:
-        print("Image error:", e)
-
-    # fallback картинки (если API умер)
-    fallback_images = [
-        "https://picsum.photos/512",
-        "https://placekitten.com/512/512",
-        "https://dummyimage.com/512x512/000/fff&text=Tarot"
-    ]
-
-    return random.choice(fallback_images)
+    return f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}"
 
 # 🚀 старт
 @dp.message(CommandStart())
 async def start(message: types.Message):
     await message.answer("🔮 Нажми /card чтобы получить карту судьбы")
 
-# 🎴 команда карты
+# 🎴 карта
 @dp.message(lambda message: message.text == "/card")
 async def card(message: types.Message):
     await message.answer("🔮 Твоя карта генерируется...")
@@ -85,7 +63,7 @@ async def card(message: types.Message):
     rarity_text, rarity_prompt = random.choice(RARITY)
 
     text = generate_text()
-    image_path = generate_image(style, rarity_prompt)
+    image_url = generate_image_url(style, rarity_prompt)
 
     caption = f"""
 🔮 Твоя карта:
@@ -97,16 +75,22 @@ async def card(message: types.Message):
 """
 
     try:
-        # если ссылка
-        if isinstance(image_path, str) and image_path.startswith("http"):
-            await message.answer_photo(photo=image_path, caption=caption)
-        else:
-            photo = types.FSInputFile(image_path)
-            await message.answer_photo(photo=photo, caption=caption)
+        # ⏱️ жесткий таймаут 10 сек
+        await asyncio.wait_for(
+            message.answer_photo(photo=image_url, caption=caption),
+            timeout=10
+        )
+
+    except asyncio.TimeoutError:
+        await message.answer("⚠️ Генерация заняла слишком долго, попробуй ещё раз")
 
     except Exception as e:
-        print("Send error:", e)
-        await message.answer("⚠️ Ошибка отправки карты, попробуй ещё раз")
+        print("ERROR:", e)
+
+        # fallback картинка
+        fallback = "https://picsum.photos/512"
+
+        await message.answer_photo(photo=fallback, caption=caption)
 
 # fallback
 @dp.message()
