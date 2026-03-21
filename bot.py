@@ -1,163 +1,220 @@
 import asyncio
 import random
 import os
+import json
+import time
+
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# 🔑 токен
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-bot = Bot(token=TELEGRAM_TOKEN)
+bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# 🎨 стили
-STYLES = [
-    "dark gothic tarot",
-    "cute anime tarot",
-    "absurd meme tarot",
-    "psychedelic cursed tarot",
-    "low budget cursed png tarot",
-]
+DATA_FILE = "data.json"
 
-# 💎 редкость
-RARITY = [
-    ("обычная карта", "common"),
-    ("редкая карта", "rare"),
-    ("легендарная 💀", "legendary"),
-    ("проклятая 😈", "cursed"),
-]
+# 💾 база
+def load_data():
+    if not os.path.exists(DATA_FILE):
+        return {}
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-# 🃏 абсурдные карты
-CARDS = [
-    "Король Сломанных Wi-Fi",
-    "Туз Кринжа",
-    "Жрица Неловкого Молчания",
-    "Рыцарь Просроченных Дедлайнов",
-    "Дьявол Лени",
-    "Колесо Непонятно Чего",
-    "Башня, которая просто упала",
-    "Император Без Штанов",
-    "Маг Потерянных Носков",
-    "Смерть, но ты уже привык",
-]
+def save_data(data):
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
-# 🧠 ЖЕСТКИЕ ПРЕДСКАЗАНИЯ
-PREDICTIONS = [
-    "Сегодня ты снова обосрёшься, но уже морально.",
-    "Вселенная намекает: пора перестать быть долбоёбом.",
-    "Ты на верном пути... но путь ведёт в жопу.",
-    "Скоро будет шанс — и ты его, конечно, просрёшь.",
-    "Твоя удача: 1/10, но зато стабильно.",
-    "Сегодня можно всё. Даже позориться.",
-    "Карта говорит: хватит страдать хуйнёй.",
-    "Ты главный герой… но комедии.",
-    "Всё будет нормально. Наверное. Нет.",
-    "Ты думаешь это знак? Да. Плохой.",
-]
+# 🎰 редкость
+def roll_rarity():
+    r = random.randint(1, 100)
+    if r <= 60:
+        return "Обычная", "simple"
+    elif r <= 90:
+        return "Редкая", "detailed glowing"
+    elif r <= 98:
+        return "Легендарная 💀", "epic cinematic"
+    else:
+        return "ПРОКЛЯТАЯ 😈", "horror cursed demonic"
 
-# 📚 коллекция пользователей
-user_cards = {}
+# 🃏 генерация уникальной карты
+def generate_card_name():
+    parts1 = ["Император", "Жрица", "Рыцарь", "Дьявол", "Маг", "Скелет", "Кот", "Пельмень"]
+    parts2 = ["Хаоса", "Кринжа", "Судьбы", "Прокрастинации", "Wi-Fi", "Налогов", "Абсурда"]
 
+    return f"{random.choice(parts1)} {random.choice(parts2)}"
 
-# 🔘 клавиатура
-def get_keyboard():
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔮 Получить карту", callback_data="card")],
-        [InlineKeyboardButton(text="📚 Моя коллекция", callback_data="collection")]
+# 🧠 уникальное предсказание
+def generate_prediction():
+    templates = [
+        "Ты столкнёшься с {event}, и это изменит всё.",
+        "Сегодня судьба принесёт {event}. Готовься.",
+        "Твоя жизнь скоро пересечётся с {event}.",
+        "Избегай {event}, если хочешь выжить морально.",
+        "Ты сам и есть {event}."
+    ]
+
+    events = [
+        "абсурдным выбором",
+        "кринжовой ситуацией",
+        "неожиданным позором",
+        "глупым решением",
+        "хаотичным событием"
+    ]
+
+    text = random.choice(templates).format(event=random.choice(events))
+
+    # добавляем немного безумия
+    endings = [
+        "И да, это будет странно.",
+        "Ты не готов.",
+        "Но ты всё равно туда полезешь.",
+        "Судьба уже смеётся.",
+        "Прими это."
+    ]
+
+    return text + " " + random.choice(endings)
+
+# 🎨 генерация картинки
+def generate_image_url(card_name, rarity_prompt, prediction):
+    prompt = f"tarot card, {card_name}, {rarity_prompt}, {prediction}, mystical, detailed, surreal"
+    return f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}"
+
+# 🎮 клавиатура
+def kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎰 Крутить (100💰)", callback_data="roll")],
+        [InlineKeyboardButton(text="🎁 Ежедневка", callback_data="daily")],
+        [InlineKeyboardButton(text="📦 Коллекция", callback_data="collection")],
+        [InlineKeyboardButton(text="📊 Статистика", callback_data="stats")]
     ])
-    return kb
-
 
 # 🚀 старт
 @dp.message(CommandStart())
 async def start(message: types.Message):
-    await message.answer(
-        "🔮 Добро пожаловать в самый ебанутый таро-бот\n\nЖми кнопку 👇",
-        reply_markup=get_keyboard()
-    )
+    data = load_data()
+    uid = str(message.from_user.id)
 
+    if uid not in data:
+        data[uid] = {
+            "coins": 500,
+            "cards": [],
+            "names": [],
+            "count": 0,
+            "last_daily": 0
+        }
+        save_data(data)
 
-# 🎴 генерация карты
-async def generate_card():
-    await asyncio.sleep(1)  # имитация генерации
+    await message.answer("💀 ФИНАЛЬНОЕ ТАРО АКТИВНО", reply_markup=kb())
 
-    style = random.choice(STYLES)
-    rarity_text, _ = random.choice(RARITY)
-    card_name = random.choice(CARDS)
-    prediction = random.choice(PREDICTIONS)
+# 🎰 крутка
+@dp.callback_query(lambda c: c.data == "roll")
+async def roll(callback: types.CallbackQuery):
+    data = load_data()
+    uid = str(callback.from_user.id)
 
-    # 🖼️ простые картинки (чтобы не зависало)
-    images = [
-        "https://picsum.photos/400/600",
-        "https://placekitten.com/400/600",
-        "https://placebear.com/400/600"
-    ]
+    if data[uid]["coins"] < 100:
+        await callback.message.answer("💸 Нет денег")
+        return
 
-    image = random.choice(images)
+    data[uid]["coins"] -= 100
+
+    rarity_text, rarity_prompt = roll_rarity()
+
+    # 🔥 уникальная карта
+    for _ in range(20):
+        card_name = generate_card_name()
+        if card_name not in data[uid]["names"]:
+            break
+
+    prediction = generate_prediction()
+    image_url = generate_image_url(card_name, rarity_prompt, prediction)
 
     caption = f"""
 🃏 {card_name}
-
-🎨 Стиль: {style}
-💎 Редкость: {rarity_text}
+💎 {rarity_text}
 
 🔮 {prediction}
 """
 
-    return image, caption, card_name
-
-
-# 🎴 кнопка "получить карту"
-@dp.callback_query(lambda c: c.data == "card")
-async def card_callback(callback: types.CallbackQuery):
-    await callback.message.answer("🔮 Генерирую твою ебанутую судьбу...")
-
     try:
-        image, caption, card_name = await asyncio.wait_for(generate_card(), timeout=10)
-
-        # сохраняем в коллекцию
-        user_id = callback.from_user.id
-        if user_id not in user_cards:
-            user_cards[user_id] = []
-
-        user_cards[user_id].append(card_name)
-
-        await callback.message.answer_photo(photo=image, caption=caption)
-
+        await asyncio.wait_for(
+            callback.message.answer_photo(photo=image_url, caption=caption),
+            timeout=10
+        )
     except:
-        await callback.message.answer("💀 Карта ушла в астрал... попробуй ещё раз")
+        await callback.message.answer(caption)
 
+    # сохраняем
+    data[uid]["cards"].append({
+        "name": card_name,
+        "rarity": rarity_text,
+        "text": prediction
+    })
+    data[uid]["names"].append(card_name)
+    data[uid]["count"] += 1
 
-# 📚 коллекция
-@dp.callback_query(lambda c: c.data == "collection")
-async def collection_callback(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
+    save_data(data)
 
-    cards = user_cards.get(user_id, [])
+# 🎁 ежедневка
+@dp.callback_query(lambda c: c.data == "daily")
+async def daily(callback):
+    data = load_data()
+    uid = str(callback.from_user.id)
 
-    if not cards:
-        await callback.message.answer("📚 У тебя пока нихуя нет")
+    now = int(time.time())
+
+    if now - data[uid]["last_daily"] < 86400:
+        await callback.message.answer("⏳ Уже забрал")
         return
 
-    text = "📚 Твоя коллекция:\n\n"
-    for c in cards:
-        text += f"• {c}\n"
+    reward = random.randint(150, 400)
+    data[uid]["coins"] += reward
+    data[uid]["last_daily"] = now
+
+    save_data(data)
+
+    await callback.message.answer(f"🎁 +{reward} 💰")
+
+# 📦 коллекция
+@dp.callback_query(lambda c: c.data == "collection")
+async def collection(callback):
+    data = load_data()
+    uid = str(callback.from_user.id)
+
+    cards = data[uid]["cards"]
+
+    if not cards:
+        await callback.message.answer("📭 Пусто")
+        return
+
+    text = "📦 Коллекция:\n\n"
+    for c in cards[-10:]:
+        text += f"🃏 {c['name']} — {c['rarity']}\n"
 
     await callback.message.answer(text)
 
+# 📊 статистика
+@dp.callback_query(lambda c: c.data == "stats")
+async def stats(callback):
+    data = load_data()
+    uid = str(callback.from_user.id)
 
-# 🧪 fallback
-@dp.message()
-async def fallback(message: types.Message):
-    await message.answer("Жми кнопки, не тупи 👇", reply_markup=get_keyboard())
+    user = data[uid]
 
+    await callback.message.answer(f"""
+📊 Статистика:
 
-# ▶️ запуск
+💰 Монеты: {user['coins']}
+🎰 Крутки: {user['count']}
+🃏 Уникальных карт: {len(user['names'])}
+""")
+
+# запуск
 async def main():
-    print("Бот запущен 💀")
+    print("🔥 FINAL BOT RUNNING")
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
