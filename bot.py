@@ -1,105 +1,75 @@
 import asyncio
 import random
 import os
-import base64
+import requests
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, BufferedInputFile
-from openai import OpenAI
 
 # 🔑 ключи
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+HF_TOKEN = os.getenv("HF_TOKEN")
 
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
-client = OpenAI(api_key=OPENAI_API_KEY)
 
 # 🎴 уникальность
 used_cards = set()
 
+# 💎 редкость
+RARITY = [
+    "обычная",
+    "редкая",
+    "легендарная",
+    "проклятая"
+]
+
 # 🎨 стили
 STYLES = [
     "dark gothic tarot",
-    "anime tarot masterpiece",
-    "surreal absurd tarot art",
-    "cyberpunk mystical tarot",
+    "anime tarot",
+    "surreal tarot",
+    "cyberpunk tarot"
 ]
 
-# 💎 редкость
-RARITY = [
-    ("обычная", "common"),
-    ("редкая", "rare"),
-    ("легендарная", "legendary"),
-    ("проклятая 😈", "cursed")
+# 🧠 генерация карты (без OpenAI)
+CARD_POOL = [
+    ("Бог кредитов", "Ты снова в долгах, но уже красиво."),
+    ("Wi-Fi шаман", "Связь нестабильна, как твоя судьба."),
+    ("Пельмень судьбы", "Ты варишься в событиях."),
+    ("Скелет на подработке", "Ты живешь, но зачем-то работаешь."),
+    ("Глаз системы", "За тобой наблюдают."),
+    ("Цифровой демон", "Ошибка стала частью тебя."),
+    ("Король багов", "Ты управляешь хаосом."),
+    ("Сломанный пророк", "Ты знал, но сделал хуже."),
 ]
 
-# 🧠 генерация карты (название + смысл)
-def generate_card_data():
-    prompt = """
-Придумай ОДНУ уникальную карту таро.
+def generate_card():
+    while True:
+        card = random.choice(CARD_POOL)
+        if card[0] not in used_cards:
+            used_cards.add(card[0])
+            return card
 
-Формат строго:
-Название: ...
-Описание: ...
+# 🎨 генерация картинки через HuggingFace
+def generate_image(prompt):
+    API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
 
-Правила:
-- название должно быть абсурдным, но звучать как карта таро
-- описание короткое (1 строка)
-- не повторяй классические карты
-- можно мемы, абсурд, темный юмор
-"""
+    headers = {
+        "Authorization": f"Bearer {HF_TOKEN}"
+    }
 
-    res = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}]
+    response = requests.post(
+        API_URL,
+        headers=headers,
+        json={"inputs": prompt}
     )
 
-    text = res.choices[0].message.content
+    if response.status_code != 200:
+        raise Exception(response.text)
 
-    try:
-        name = text.split("Название:")[1].split("Описание:")[0].strip()
-        desc = text.split("Описание:")[1].strip()
-    except:
-        name = "Сломанная реальность"
-        desc = "Что-то пошло не так, но уже поздно."
-
-    return name, desc
-
-
-# 🎨 генерация картинки (ИСПРАВЛЕНО)
-def generate_image_bytes(name, desc, style, rarity):
-    prompt = f"""
-Tarot card illustration.
-
-Card name: {name}
-Meaning: {desc}
-
-Style: {style}
-Rarity: {rarity}
-
-Requirements:
-- BEAUTIFUL detailed tarot card
-- centered composition
-- fantasy illustration
-- high quality
-- no random objects
-- MUST match the meaning and name
-- no chaos, coherent scene
-"""
-
-    img = client.images.generate(
-        model="gpt-image-1",
-        prompt=prompt,
-        size="1024x1024"
-    )
-
-    # 🔥 ВАЖНО: берем base64
-    image_base64 = img.data[0].b64_json
-    image_bytes = base64.b64decode(image_base64)
-
-    return image_bytes
+    return response.content
 
 
 # 🎮 кнопки
@@ -108,7 +78,6 @@ def main_keyboard():
         keyboard=[
             [KeyboardButton(text="🎰 Крутить")],
             [KeyboardButton(text="📦 Коллекция"), KeyboardButton(text="📊 Стата")],
-            [KeyboardButton(text="🎁 Дейлик")]
         ],
         resize_keyboard=True
     )
@@ -118,35 +87,35 @@ def main_keyboard():
 @dp.message(CommandStart())
 async def start(message: types.Message):
     await message.answer(
-        "💀 ULTIMATE TAROT ONLINE\n\nНажми «Крутить»",
+        "💀 FREE TAROT\n\nЖми «Крутить»",
         reply_markup=main_keyboard()
     )
 
 
-# 🎴 генерация карты
+# 🎴 генерация
 @dp.message(lambda m: m.text == "🎰 Крутить")
 async def spin(message: types.Message):
     await message.answer("🎨 Генерирую карту...")
 
+    name, desc = generate_card()
     style = random.choice(STYLES)
-    rarity_text, rarity_key = random.choice(RARITY)
+    rarity = random.choice(RARITY)
 
-    # уникальная карта
-    for _ in range(10):
-        name, desc = generate_card_data()
-        if name not in used_cards:
-            used_cards.add(name)
-            break
+    prompt = f"""
+tarot card illustration, {name},
+{desc},
+style: {style},
+beautiful, detailed, centered composition
+"""
 
     try:
-        img_bytes = generate_image_bytes(name, desc, style, rarity_key)
-
+        img_bytes = generate_image(prompt)
         photo = BufferedInputFile(img_bytes, filename="card.png")
 
         caption = f"""
 🃏 {name}
 
-💎 Редкость: {rarity_text}
+💎 {rarity}
 
 🔮 {desc}
 """
@@ -155,13 +124,13 @@ async def spin(message: types.Message):
 
     except Exception as e:
         print("ERROR:", e)
-        await message.answer("⚠️ арт не загрузился, попробуй ещё раз")
+        await message.answer("⚠️ не удалось сгенерировать арт")
 
 
 # 🧪 fallback
 @dp.message()
 async def fallback(message: types.Message):
-    await message.answer("Нажми 🎰 Крутить")
+    await message.answer("Жми 🎰 Крутить")
 
 
 # ▶️ запуск
