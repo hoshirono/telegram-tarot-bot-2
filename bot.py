@@ -1,54 +1,56 @@
-import requests
+import logging
 import random
+import os
+
 from aiogram import Bot, Dispatcher, types
 from aiogram.utils import executor
 
-import os
+# === ЛОГИ ===
+logging.basicConfig(level=logging.INFO)
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-HF_TOKEN = os.getenv("HF_TOKEN")
+# === ТОКЕН ИЗ RAILWAY VARIABLES ===
+API_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2"
-
-headers = {
-    "Authorization": f"Bearer {HF_TOKEN}"
-}
-
-bot = Bot(token=TELEGRAM_TOKEN)
+# === БОТ ===
+bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
 
-meanings = [
-    "ты сегодня ничего не сделаешь",
-    "удача рядом, но ты её проигнорируешь",
-    "всё получится, но не сегодня",
-    "ты снова залипнешь в телефоне",
-    "сегодня день странных решений",
-    "ты избежишь работы любым способом",
-    "мотивация придёт... но не к тебе",
-    "вселенная пыталась, но ты сильнее",
+# === СТИЛИ ===
+STYLES = [
+    "dark tarot",
+    "cute anime tarot",
+    "absurd meme tarot"
 ]
 
-def generate_image(prompt):
-    response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
-    return response.content
+# === УРОВНИ ===
+LEVELS = [
+    "обычная карта",
+    "редкая карта",
+    "проклятая 😈"
+]
 
+# === КОМАНДА /start ===
 @dp.message_handler(commands=['start'])
-async def start(msg: types.Message):
-    await msg.answer("🔮 Напиши /card чтобы получить мем-карту дня")
+async def start(message: types.Message):
+    await message.answer(
+        "🔮 Привет! Напиши любое сообщение — я вытащу тебе карту таро."
+    )
 
-@dp.message_handler(commands=['card'])
-async def card(msg: types.Message):
-    meaning = random.choice(meanings)
+# === ЛЮБОЕ СООБЩЕНИЕ ===
+@dp.message_handler()
+async def tarot(message: types.Message):
+    style = random.choice(STYLES)
+    level = random.choice(LEVELS)
 
-    prompt = f"tarot card, surreal meme, {meaning}, dramatic lighting, detailed, digital art"
+    text = f"""
+🔮 Твоя карта:
 
-    image_bytes = generate_image(prompt)
+🎨 Стиль: {style}
+🧠 Уровень: {level}
+"""
 
-    with open("card.png", "wb") as f:
-        f.write(image_bytes)
+    await message.answer(text)
 
-    with open("card.png", "rb") as photo:
-        await msg.answer_photo(photo, caption=f"🔮 {meaning}")
-
-if __name__ == "__main__":
-    executor.start_polling(dp)
+# === ЗАПУСК ===
+if __name__ == '__main__':
+    executor.start_polling(dp, skip_updates=True)
