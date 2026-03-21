@@ -1,6 +1,7 @@
 import asyncio
 import random
 import os
+import time
 from io import BytesIO
 
 import aiohttp
@@ -18,38 +19,49 @@ dp = Dispatcher()
 memory = {}
 used_predictions = set()
 active_users = set()
+last_message_time = {}
 
 keyboard = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text="🔮 получить проклятие")]],
+    keyboard=[[KeyboardButton(text="🔮 ну давай, удиви меня")]],
     resize_keyboard=True
 )
 
-# 🧠 генерация текста
-SUBJECTS = ["ты", "твоя жизнь", "твои попытки"]
-ACTIONS = ["разваливаются", "уходят в никуда", "ломаются"]
-INSULTS = ["как обычно", "потому что это ты", "и это жалко"]
+# 😏 СТЁБ + ПРЕДСКАЗАНИЯ
+SUBJECTS = ["ты", "твоя гениальная стратегия", "твой план"]
+ACTIONS = [
+    "снова пойдёт не туда",
+    "развалится в самый неподходящий момент",
+    "приведёт к максимально странному результату",
+]
+IRONY = [
+    "но ты же этого и хотел, да?",
+    "всё под контролем, конечно",
+    "прямо как ты и планировал",
+]
 
-CARD1 = ["Император", "Шут", "Жертва", "Дурак"]
-CARD2 = ["кринжа", "позора", "самообмана"]
+# 🎴 карты
+CARD1 = ["Император", "Шут", "Гений", "Стратег"]
+CARD2 = ["сомнительных решений", "кринж-логики", "самообмана"]
 
-# 🧠 уникальное предсказание
+# 🧠 генерация предсказания
 def generate_prediction(user_id):
     while True:
-        text = f"{random.choice(SUBJECTS)} {random.choice(ACTIONS)} {random.choice(INSULTS)}"
+        text = f"{random.choice(SUBJECTS)} {random.choice(ACTIONS)}, {random.choice(IRONY)}"
         if text not in used_predictions:
             used_predictions.add(text)
             break
 
     if user_id in memory and memory[user_id]:
-        text += f"\n\nты писал: '{memory[user_id][-1]}'"
+        last = memory[user_id][-1]
+        text += f"\n\nкстати, '{last}' — это вообще отдельный уровень"
 
     return text
 
 def generate_card():
     return f"{random.choice(CARD1)} {random.choice(CARD2)}"
 
-# 💀 генерация ПРОКЛЯТОЙ картинки
-async def generate_cursed_image(prompt):
+# 💀 генерация картинки (с fallback)
+async def generate_image(prompt):
     async with aiohttp.ClientSession() as session:
         try:
             url = "https://router.huggingface.co/hf-inference/models/stabilityai/sdxl-turbo"
@@ -60,21 +72,27 @@ async def generate_cursed_image(prompt):
             }
 
             payload = {
-                "inputs": f"{prompt}, horror, cursed image, distorted face, surreal nightmare, dark lighting",
+                "inputs": f"{prompt}, surreal, cursed, weird, absurd"
             }
 
-            async with session.post(url, headers=headers, json=payload, timeout=20) as r:
+            async with session.post(url, headers=headers, json=payload, timeout=15) as r:
                 if r.status == 200:
                     return BytesIO(await r.read())
-                else:
-                    print(await r.text())
-                    return None
 
-        except Exception as e:
-            print("IMG ERROR:", e)
-            return None
+        except:
+            pass
 
-# 🎴 отправка карты
+    # fallback (чтобы НЕ ломалось)
+    fallback = random.choice([
+        "https://picsum.photos/512?random=1",
+        "https://picsum.photos/512?random=2"
+    ])
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(fallback) as r:
+            return BytesIO(await r.read())
+
+# 🎴 отправка
 async def send_card(message: types.Message):
     user_id = message.from_user.id
 
@@ -84,17 +102,12 @@ async def send_card(message: types.Message):
     card = generate_card()
     prediction = generate_prediction(user_id)
 
-    prompt = f"{card}, {prediction}"
-
-    img = await generate_cursed_image(prompt)
-
     text = f"🃏 {card}\n\n🔮 {prediction}"
 
-    if img:
-        photo = BufferedInputFile(img.read(), filename="cursed.jpg")
-        await message.answer_photo(photo=photo, caption=text)
-    else:
-        await message.answer(text + "\n(даже картинка не захотела появляться)")
+    img = await generate_image(text)
+
+    photo = BufferedInputFile(img.read(), filename="img.jpg")
+    await message.answer_photo(photo=photo, caption=text)
 
 # 🚀 старт
 @dp.message(CommandStart())
@@ -102,12 +115,12 @@ async def start(message: types.Message):
     active_users.add(message.from_user.id)
 
     await message.answer(
-        "я покажу тебе то, что лучше не видеть",
+        "ну давай посмотрим, насколько ты сегодня облажаешься",
         reply_markup=keyboard
     )
 
 # 🎰 кнопка
-@dp.message(lambda m: m.text == "🔮 получить проклятие")
+@dp.message(lambda m: m.text == "🔮 ну давай, удиви меня")
 async def spin(message: types.Message):
     user_id = message.from_user.id
     active_users.add(user_id)
@@ -125,28 +138,32 @@ async def remember(message: types.Message):
     if len(memory[user_id]) > 50:
         memory[user_id].pop(0)
 
-    await message.answer("я это запомнил", reply_markup=keyboard)
+    await message.answer("записал. потом пригодится.", reply_markup=keyboard)
 
-# 👁 инициатива
+# 👁 инициатива (НЕ БОЛЬШЕ 2 РАЗ В ДЕНЬ)
 async def watcher():
     while True:
-        await asyncio.sleep(random.randint(60, 120))
+        await asyncio.sleep(60)
 
-        if not active_users:
-            continue
+        for user_id in list(active_users):
+            now = time.time()
+            last = last_message_time.get(user_id, 0)
 
-        user_id = random.choice(list(active_users))
+            # 12 часов между сообщениями
+            if now - last < 43200:
+                continue
 
-        text = random.choice([
-            "я всё ещё думаю о тебе",
-            "ты не должен был это видеть",
-            "это только начало",
-        ])
+            text = random.choice([
+                "я всё ещё думаю о твоём последнем решении",
+                "интересно, ты уже понял, где ошибся?",
+                "ну что, всё идёт по плану? :)",
+            ])
 
-        try:
-            await bot.send_message(user_id, f"👁 {text}")
-        except:
-            pass
+            try:
+                await bot.send_message(user_id, f"👁 {text}")
+                last_message_time[user_id] = now
+            except:
+                pass
 
 # ▶️ запуск
 async def main():
