@@ -1,131 +1,101 @@
 import asyncio
 import random
-import requests
-
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.filters import CommandStart
 
-# ======================
-# 🔑 ВСТАВЬ СЮДА
-# ======================
-TOKEN = "8705289370:AAGPqjd8uNsnyr04zCM0S3pOjo1jLUSW0vg"
+TOKEN = "ТВОЙ_ТОКЕН_СЮДА"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# ======================
-# 🧠 ПАМЯТЬ
-# ======================
-user_memory = {}
-
-# ======================
-# 🔘 КНОПКА
-# ======================
+# --- КНОПКА ---
 def get_keyboard():
-    kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add(KeyboardButton("💀 Получить судьбу"))
-    return kb
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🔮 Дай мне судьбу, ублюдок")]
+        ],
+        resize_keyboard=True
+    )
+    return keyboard
 
-# ======================
-# 🖼️ ГЕНЕРАЦИЯ ФОТО (БЕЗ API)
-# ======================
-def get_cursed_image():
-    themes = [
-        "weird face close up",
-        "distorted human body",
-        "liminal space empty room",
-        "strange creepy object",
-        "weird food disgusting",
-        "ugly animal close up",
-        "blurry shadow figure",
-        "abandoned building creepy",
-        "strange mannequin",
-        "distorted selfie"
-    ]
-    theme = random.choice(themes)
-    return f"https://source.unsplash.com/800x800/?{theme}"
 
-# ======================
-# 🔮 ГЕНЕРАЦИЯ ПРЕДСКАЗАНИЯ
-# ======================
-def generate_prediction(user_text=None):
-    insults = [
-        "гений без шансов",
-        "человек-ошибка",
-        "недоразумение с Wi-Fi",
-        "случайный баг реальности",
-        "побочный квест без награды",
-        "живое разочарование"
+# --- ПРЕДСКАЗАНИЯ ---
+def generate_prediction():
+    starts = [
+        "Сегодня",
+        "В ближайшее время",
+        "Судя по всему",
+        "Очевидно",
+        "Ты даже не заметишь как"
     ]
 
     events = [
-        "ты опять облажаешься",
-        "все пойдет странно и криво",
-        "кто-то будет тебя терпеть из жалости",
-        "ты снова выберешь худший вариант",
-        "вселенная слегка над тобой посмеётся",
-        "реальность даст тебе пощёчину"
+        "твоя жизнь снова пойдет по пизде",
+        "ты облажаешься в самом простом",
+        "все пойдет не так, как ты думаешь",
+        "ты будешь выглядеть максимально глупо",
+        "вселенная снова над тобой поржет"
     ]
 
     endings = [
-        "и ты сделаешь вид что так и было задумано",
-        "но ты всё равно ничего не поймёшь",
-        "и это будет даже не самый худший исход",
-        "но ты опять не сделаешь выводов",
-        "и да, это только начало",
-        "но ты продолжишь в том же духе"
+        "и ты ничего с этим не сделаешь",
+        "как обычно",
+        "потому что ты — это ты",
+        "и это уже закономерность",
+        "но ты сделаешь вид, что все нормально"
     ]
 
-    insult = random.choice(insults)
-    event = random.choice(events)
-    ending = random.choice(endings)
+    return f"{random.choice(starts)} {random.choice(events)}, {random.choice(endings)}."
 
-    if user_text:
-        return f"Ты писал: '{user_text[:20]}...' — и это многое объясняет.\n\nСегодня ты, {insult}, {event}, {ending}."
-    else:
-        return f"Сегодня ты, {insult}, {event}, {ending}."
 
-# ======================
-# 🚀 СТАРТ
-# ======================
-@dp.message(lambda msg: msg.text == "/start")
-async def start(msg: types.Message):
-    await msg.answer(
-        "О, ты вернулся. Не знаю зачем, но ладно.\nЖми кнопку и страдай.",
+# --- ФОТО (работает ВСЕГДА) ---
+def get_photo():
+    # источник, который не ломается
+    return f"https://picsum.photos/seed/{random.randint(1,100000)}/600/600"
+
+
+# --- СТАРТ ---
+@dp.message(CommandStart())
+async def start(message: types.Message):
+    await message.answer(
+        "Ну привет. Жми кнопку и получай свою порцию правды.",
         reply_markup=get_keyboard()
     )
 
-# ======================
-# 💀 КНОПКА
-# ======================
-@dp.message(lambda msg: msg.text == "💀 Получить судьбу")
-async def get_fate(msg: types.Message):
-    await msg.answer("...смотрю в твою жалкую судьбу...")
 
-    await bot.send_chat_action(msg.chat.id, "typing")
-    await asyncio.sleep(2)
+# --- КНОПКА ---
+@dp.message(lambda message: message.text == "🔮 Дай мне судьбу, ублюдок")
+async def tarot(message: types.Message):
+    await message.answer_chat_action("typing")
 
-    image_url = get_cursed_image()
-    memory = user_memory.get(msg.from_user.id)
+    text = generate_prediction()
+    photo = get_photo()
 
-    text = generate_prediction(memory)
+    try:
+        await message.answer_photo(
+            photo=photo,
+            caption=text
+        )
+    except Exception as e:
+        print("Ошибка отправки фото:", e)
+        await message.answer(text)
 
-    await msg.answer_photo(photo=image_url, caption=text)
 
-# ======================
-# 🧠 ЗАПОМИНАНИЕ
-# ======================
+# --- ЛЮБОЙ ТЕКСТ ---
 @dp.message()
-async def remember(msg: types.Message):
-    user_memory[msg.from_user.id] = msg.text
-    await msg.answer("Запомнил. Зря ты это написал.")
+async def user_text(message: types.Message):
+    await message.answer(
+        f"Ты написал: {message.text}\n\nЗапомнил. Потом припомню 🙂",
+        reply_markup=get_keyboard()
+    )
 
-# ======================
-# ▶️ ЗАПУСК
-# ======================
+
+# --- ЗАПУСК ---
 async def main():
-    print("Бот запущен 💀")
+    print("Бот запущен")
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
