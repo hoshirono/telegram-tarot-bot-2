@@ -197,9 +197,11 @@ async def watcher():
 # ▶️ запуск
 async def main():
     print("бот запущен")
+
+    await bot.delete_webhook(drop_pending_updates=True)  # 💀 фикс
+
     asyncio.create_task(watcher())
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
