@@ -7,10 +7,9 @@ from io import BytesIO
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, FSInputFile
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.enums import ChatAction
 
-# 🔑 токены
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 UNSPLASH_KEY = os.getenv("UNSPLASH_KEY")
 
@@ -29,16 +28,21 @@ keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# 📸 запросы
-PHOTO_QUERIES = [
-    "creepy person dark",
-    "abandoned hospital horror",
-    "disturbing empty room",
-    "shadow figure night",
-    "lonely street fog",
+# 📸 fallback (всегда работают)
+FALLBACK_IMAGES = [
+    "https://images.unsplash.com/photo-1509248961158-e54f6934749c",
+    "https://images.unsplash.com/photo-1495567720989-cebdbdd97913",
+    "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee",
 ]
 
-# 📸 получить фото (теперь байты)
+PHOTO_QUERIES = [
+    "creepy dark person",
+    "abandoned horror building",
+    "lonely night street",
+    "shadow figure",
+]
+
+# 📸 получение картинки (СТАБИЛЬНО)
 def get_photo_bytes():
     url = "https://api.unsplash.com/photos/random"
 
@@ -46,22 +50,40 @@ def get_photo_bytes():
         "Authorization": f"Client-ID {UNSPLASH_KEY}"
     }
 
-    params = {
-        "query": random.choice(PHOTO_QUERIES),
-        "orientation": "square"
-    }
+    for _ in range(3):  # 3 попытки
+        try:
+            params = {
+                "query": random.choice(PHOTO_QUERIES),
+                "orientation": "square"
+            }
 
+            r = requests.get(url, headers=headers, params=params, timeout=10)
+
+            if r.status_code == 200:
+                data = r.json()
+
+                if "urls" not in data:
+                    continue
+
+                img_url = data["urls"].get("regular")
+                if not img_url:
+                    continue
+
+                img = requests.get(img_url, timeout=10)
+
+                if img.status_code == 200:
+                    return BytesIO(img.content)
+
+        except:
+            continue
+
+    # 💀 fallback если всё сломалось
     try:
-        r = requests.get(url, headers=headers, params=params, timeout=10)
-        if r.status_code == 200:
-            img_url = r.json()["urls"]["regular"]
-
-            img = requests.get(img_url, timeout=10)
-            return BytesIO(img.content)
+        fallback = random.choice(FALLBACK_IMAGES)
+        img = requests.get(fallback, timeout=10)
+        return BytesIO(img.content)
     except:
         return None
-
-    return None
 
 # 👁 слежка
 def observer(user_id):
@@ -109,9 +131,9 @@ async def generate_card(message: types.Message):
     memory = user_memory.get(user_id, [])
     level = user_level.get(user_id, 1)
 
-    # ⏳ эффект "печатает"
+    # ⏳ печатает
     await bot.send_chat_action(message.chat.id, ChatAction.TYPING)
-    await asyncio.sleep(random.uniform(1.5, 3.5))
+    await asyncio.sleep(random.uniform(1.5, 3.0))
 
     text = generate_text(name, memory, level)
     obs = observer(user_id)
@@ -125,7 +147,7 @@ async def generate_card(message: types.Message):
         img_bytes.name = "photo.jpg"
         await message.answer_photo(photo=img_bytes, caption=f"💀 {text}")
     else:
-        await message.answer(f"💀 {text} (сегодня без картинки)")
+        await message.answer(f"💀 {text} (даже картинку не получилось найти...)")
 
 # 🚀 старт
 @dp.message(CommandStart())
