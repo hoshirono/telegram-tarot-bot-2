@@ -79,7 +79,8 @@ async def card(message: types.Message):
 🧠 {text}
 """
 
-    await message.answer_photo(photo=image_url, caption=caption)
+photo = types.FSInputFile(image_url)
+await message.answer_photo(photo=photo, caption=caption)
 
 # fallback
 @dp.message()
