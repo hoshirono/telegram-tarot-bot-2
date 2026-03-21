@@ -4,10 +4,17 @@ import os
 import requests
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, BufferedInputFile
 
+# 🔑 переменные
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 HF_TOKEN = os.getenv("HF_TOKEN")
+
+if not TOKEN:
+    raise Exception("❌ TELEGRAM_TOKEN не найден")
+
+if not HF_TOKEN:
+    raise Exception("❌ HF_TOKEN не найден")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -22,53 +29,53 @@ keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# 💀 генерация названия карты (кринж)
+# 💀 генерация названия
 def generate_name():
-    parts1 = ["Сломанный", "Криповый", "Проклятый", "Wi-Fi", "Цифровой", "Легендарный", "Жирный", "Бесполезный"]
-    parts2 = ["хомяк", "кредит", "долг", "сигнал", "батя", "пельмень", "сервер", "бот"]
-    parts3 = ["судьбы", "разочарования", "ошибки", "позора", "провала"]
+    a = ["Проклятый", "Сломанный", "Кринжовый", "Цифровой", "Бесполезный", "Гнилой", "Wi-Fi", "Легендарный"]
+    b = ["хомяк", "кредит", "долг", "батя", "пельмень", "сервер", "бот", "разум"]
+    c = ["судьбы", "позора", "ошибки", "провала", "страдания"]
 
-    return f"{random.choice(parts1)} {random.choice(parts2)} {random.choice(parts3)}"
+    return f"{random.choice(a)} {random.choice(b)} {random.choice(c)}"
 
-# 🧠 предсказания (жесткие)
+# 🧠 предсказания (жёсткие)
 PREDICTIONS = [
-    "Ты выбрал худший путь, но уже поздно отступать.",
-    "Судьба орёт тебе в лицо, но ты всё равно тупишь.",
-    "Ты опять сделал не тот выбор. Как обычно.",
-    "Вселенная дала тебе шанс, но ты его просрал.",
-    "Ты идёшь вперёд… но в сторону дна.",
-    "Поздравляю, ты сам себе главный враг.",
+    "Ты выбрал худший путь, и уже не свернёшь.",
+    "Ты опять всё испортил. Удивительно стабильно.",
+    "Судьба дала шанс, но ты его не понял.",
+    "Ты идёшь вперёд, но в сторону дна.",
     "Даже этот бот в тебя не верит.",
-    "Ты не на том пути. И не в той жизни.",
-    "Скоро будет хуже. Намного хуже.",
+    "Ты — главный баг в своей жизни.",
+    "Поздравляю, ты сам себе проблема.",
+    "Станет хуже. Намного хуже.",
     "Ты уже проиграл, просто ещё не понял.",
-    "Это знак. Плохой знак.",
-    "Ты думаешь это случайность? Нет, это ты кривой."
+    "Это не знак. Это приговор."
 ]
 
-# 🎨 генерация картинки (новый HF API)
+# 🎨 генерация картинки
 def generate_image(prompt):
-    url = "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0"
+    try:
+        url = "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0"
 
-    headers = {
-        "Authorization": f"Bearer {HF_TOKEN}",
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "negative_prompt": "blurry, bad quality, text, watermark",
+        headers = {
+            "Authorization": f"Bearer {HF_TOKEN}",
+            "Content-Type": "application/json"
         }
-    }
 
-    response = requests.post(url, headers=headers, json=payload)
+        payload = {
+            "inputs": prompt
+        }
 
-    if response.status_code != 200:
-        print("HF ERROR:", response.text)
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
+
+        if response.status_code != 200:
+            print("HF ERROR:", response.text)
+            return None
+
+        return response.content
+
+    except Exception as e:
+        print("CRASH:", e)
         return None
-
-    return response.content
 
 # 🎴 генерация карты
 async def generate_card(message: types.Message):
@@ -78,31 +85,28 @@ async def generate_card(message: types.Message):
     prediction = random.choice(PREDICTIONS)
 
     prompt = f"""
-tarot card illustration, dark fantasy, absurd surreal,
+tarot card, dark fantasy, absurd surreal,
 {name},
 meaning: {prediction},
-highly detailed, mystical, professional art
+highly detailed, dramatic lighting, masterpiece
 """
 
     img = generate_image(prompt)
 
-    caption = f"""
-🃏 {name}
-
-💀 {prediction}
-"""
+    caption = f"🃏 {name}\n\n💀 {prediction}"
 
     if img:
-        await message.answer_photo(photo=img, caption=caption)
+        photo = BufferedInputFile(img, filename="card.png")
+        await message.answer_photo(photo=photo, caption=caption)
     else:
         await message.answer("⚠ не удалось сгенерировать арт")
 
 # 🚀 старт
 @dp.message(CommandStart())
 async def start(message: types.Message):
-    await message.answer("💀 ULTIMATE TAROT", reply_markup=keyboard)
+    await message.answer("💀 ULTIMATE TAROT ONLINE", reply_markup=keyboard)
 
-# 🎰 кнопка крутить
+# 🎰 крутить
 @dp.message(lambda msg: msg.text == "🎰 Крутить")
 async def spin(message: types.Message):
     await generate_card(message)
