@@ -1,6 +1,7 @@
 import asyncio
 import random
 import time
+import os
 from io import BytesIO
 
 import aiohttp
@@ -9,8 +10,14 @@ from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, BufferedInputFile
 from aiogram.enums import ChatAction
 
-TOKEN = "8705289370:AAHRSaJFBqQR8qKdX2Z1SiiImKgGUjs3Vew"
-HF_TOKEN = "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"
+# 🔐 БЕРЕМ ИЗ ENV
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+HF_TOKEN = os.getenv("HF_TOKEN")
+
+if not TOKEN:
+    raise ValueError("Нет TELEGRAM_TOKEN. Ты опять всё сломал.")
+if not HF_TOKEN:
+    raise ValueError("Нет HF_TOKEN. Даже картинки не будут работать.")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -18,14 +25,14 @@ dp = Dispatcher()
 memory = {}
 active_users = set()
 last_message_time = {}
-used_predictions = set()  # ✅ фикс
+used_predictions = set()
 
 keyboard = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="🔮 ну давай, разъеби мою судьбу")]],
     resize_keyboard=True
 )
 
-# 🧠 генерация текста
+# 🧠 генерация текста (НЕПОВТОРЯЕМЫЕ)
 def generate_prediction(user_id=None):
     subjects = [
         "Сегодня", "Эта неделя", "Твоя жизнь", "Судьба",
@@ -43,7 +50,9 @@ def generate_prediction(user_id=None):
         "медленный краш твоих ожиданий",
         "жалкая попытка всё исправить",
         "хаос без смысла",
-        "пиздец, но уже привычный"
+        "пиздец, но уже привычный",
+        "затянувшийся фейл без выхода",
+        "дешёвый спектакль, где ты главный клоун"
     ]
 
     endings = [
@@ -51,7 +60,9 @@ def generate_prediction(user_id=None):
         "но ты сделаешь вид, что всё ок.",
         "и да, ты опять виноват.",
         "но ты уже привык.",
-        "и ты ничего не поменяешь."
+        "и ты ничего не поменяешь.",
+        "и это станет твоей новой нормой.",
+        "и ты снова выберешь худший вариант."
     ]
 
     sarcasm = [
@@ -59,23 +70,25 @@ def generate_prediction(user_id=None):
         "Стабильность.",
         "Ну ты даёшь.",
         "Это уже стиль жизни.",
-        "Всё по канону."
+        "Всё по канону.",
+        "Держишь планку. Внизу.",
+        "Можно хуже, но ты не стал рисковать."
     ]
 
-    for _ in range(200):
+    for _ in range(300):
         text = f"{random.choice(subjects)} {random.choice(actions)} {random.choice(trash)}, {random.choice(endings)} {random.choice(sarcasm)}"
 
         if text not in used_predictions:
             used_predictions.add(text)
 
-            # персонализация
             if user_id and user_id in memory and memory[user_id]:
                 user_msg = random.choice(memory[user_id])
-                text += f"\n\nты писал: '{user_msg}' — это многое объясняет."
+                text += f"\n\nты писал: '{user_msg}' — теперь всё ясно."
 
             return text
 
-    return "Даже судьба устала придумывать тебе новые провалы."
+    return "Даже генератор сдался. Ты победил систему. К сожалению."
+
 
 # 🖼 генерация картинки
 async def generate_image(prompt):
@@ -89,16 +102,15 @@ async def generate_image(prompt):
             }
 
             payload = {
-                "inputs": f"{prompt}, cursed, absurd, realistic photo"
+                "inputs": f"{prompt}, cursed, absurd, nightmare, realistic photo"
             }
 
             async with session.post(url, headers=headers, json=payload, timeout=25) as r:
                 if r.status == 200:
                     data = await r.read()
-
                     return BufferedInputFile(data, filename="img.jpg")
-    except:
-        pass
+    except Exception as e:
+        print("HF error:", e)
 
     # fallback
     fallback = f"https://picsum.photos/512?random={random.randint(1,9999)}"
@@ -109,14 +121,15 @@ async def generate_image(prompt):
             return BufferedInputFile(data, filename="img.jpg")
 
 
-# 🧠 промпты
 def generate_prompt():
     return random.choice([
         "awkward silence, people staring",
         "man embarrassed in public",
-        "weird surreal situation",
-        "person alone at night sad",
-        "absurd uncanny photo"
+        "surreal absurd nightmare situation",
+        "person alone at night existential crisis",
+        "uncanny valley human distorted face",
+        "weird cursed scene realistic",
+        "liminal space human confusion"
     ])
 
 
@@ -139,7 +152,7 @@ async def start(message: types.Message):
     active_users.add(message.from_user.id)
 
     await message.answer(
-        "жми кнопку и посмотрим, как ты сегодня облажаешься",
+        "ну что, опять пришёл узнать, насколько всё плохо?",
         reply_markup=keyboard
     )
 
@@ -151,7 +164,7 @@ async def spin(message: types.Message):
     await send_card(message)
 
 
-# 🧠 память
+# 🧠 память (ТОЛЬКО при ручном вводе)
 @dp.message()
 async def remember(message: types.Message):
     user_id = message.from_user.id
@@ -163,12 +176,12 @@ async def remember(message: types.Message):
         memory[user_id].pop(0)
 
     await message.answer(
-        f"я запомнил: '{message.text}'",
+        f"запомнил: '{message.text}'\n\nжаль, что это тебе не поможет",
         reply_markup=keyboard
     )
 
 
-# 👁 инициатива
+# 👁 инициатива (≤2 раза в день)
 async def watcher():
     while True:
         await asyncio.sleep(60)
@@ -181,10 +194,11 @@ async def watcher():
                 continue
 
             text = random.choice([
-                "я всё ещё думаю о тебе",
-                "ты странно себя ведёшь",
-                "ты ведь не забыл про меня?",
-                "мне кажется, ты снова ошибся"
+                "я всё ещё наблюдаю за тобой",
+                "ты ведь снова всё испортил, да?",
+                "интересно, ты когда-нибудь учишься?",
+                "я начинаю понимать твою логику... и это пугает",
+                "ты опять что-то сделал не так, я чувствую"
             ])
 
             try:
@@ -196,12 +210,14 @@ async def watcher():
 
 # ▶️ запуск
 async def main():
-    print("бот запущен")
+    print("бот запущен (и, скорее всего, уже осуждает тебя)")
 
-    await bot.delete_webhook(drop_pending_updates=True)  # 💀 фикс
+    # 💀 фикс конфликта
+    await bot.delete_webhook(drop_pending_updates=True)
 
     asyncio.create_task(watcher())
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
