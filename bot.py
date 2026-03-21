@@ -10,123 +10,106 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, BufferedInputFile
 from aiogram.enums import ChatAction
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-UNSPLASH_KEY = os.getenv("UNSPLASH_KEY")
+HF_TOKEN = os.getenv("HF_TOKEN")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# память
 memory = {}
-level = {}
+used_predictions = set()
 active_users = set()
 
 keyboard = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text="🔮 узнать свою жалкую судьбу")]],
+    keyboard=[[KeyboardButton(text="🔮 получить проклятие")]],
     resize_keyboard=True
 )
 
-# 🎴 карты
-CARD_NAMES = [
-    "Король просранных шансов",
-    "Шут без перспектив",
-    "Император неловкости",
-    "Повешенный на своих решениях",
-    "Дурак, но с опытом",
-]
+# 🧠 генерация текста
+SUBJECTS = ["ты", "твоя жизнь", "твои попытки"]
+ACTIONS = ["разваливаются", "уходят в никуда", "ломаются"]
+INSULTS = ["как обычно", "потому что это ты", "и это жалко"]
 
-PREDICTIONS = [
-    "ты снова сделаешь не тот выбор, но будешь оправдываться",
-    "ты всё понимаешь, но всё равно делаешь хуже",
-    "ничего не изменится, потому что это ты",
-    "ты упустишь шанс и сделаешь вид, что так и надо",
-    "ты снова свернёшь не туда, как обычно",
-]
+CARD1 = ["Император", "Шут", "Жертва", "Дурак"]
+CARD2 = ["кринжа", "позора", "самообмана"]
 
-RARITY = ["обычная", "редкая", "позорная", "легендарно бесполезная"]
+# 🧠 уникальное предсказание
+def generate_prediction(user_id):
+    while True:
+        text = f"{random.choice(SUBJECTS)} {random.choice(ACTIONS)} {random.choice(INSULTS)}"
+        if text not in used_predictions:
+            used_predictions.add(text)
+            break
 
-PHOTO_QUERIES = [
-    "dark lonely person",
-    "creepy shadow",
-    "abandoned place horror",
-]
+    if user_id in memory and memory[user_id]:
+        text += f"\n\nты писал: '{memory[user_id][-1]}'"
 
-# 📸 генерация картинки
-async def get_image():
+    return text
+
+def generate_card():
+    return f"{random.choice(CARD1)} {random.choice(CARD2)}"
+
+# 💀 генерация ПРОКЛЯТОЙ картинки
+async def generate_cursed_image(prompt):
     async with aiohttp.ClientSession() as session:
         try:
-            url = "https://api.unsplash.com/photos/random"
-            headers = {"Authorization": f"Client-ID {UNSPLASH_KEY}"}
-            params = {"query": random.choice(PHOTO_QUERIES)}
+            url = "https://router.huggingface.co/hf-inference/models/stabilityai/sdxl-turbo"
 
-            async with session.get(url, headers=headers, params=params, timeout=5) as r:
-                data = await r.json()
-                img_url = data["urls"]["regular"]
+            headers = {
+                "Authorization": f"Bearer {HF_TOKEN}",
+                "Content-Type": "application/json"
+            }
 
-            async with session.get(img_url, timeout=5) as img:
-                return BytesIO(await img.read())
+            payload = {
+                "inputs": f"{prompt}, horror, cursed image, distorted face, surreal nightmare, dark lighting",
+            }
 
-        except:
+            async with session.post(url, headers=headers, json=payload, timeout=20) as r:
+                if r.status == 200:
+                    return BytesIO(await r.read())
+                else:
+                    print(await r.text())
+                    return None
+
+        except Exception as e:
+            print("IMG ERROR:", e)
             return None
 
-# 😈 генерация предсказания
-def generate_prediction(user_id, name):
-    user_memory = memory.get(user_id, [])
-    lvl = level.get(user_id, 1)
-
-    card = random.choice(CARD_NAMES)
-    pred = random.choice(PREDICTIONS)
-    rarity = random.choice(RARITY)
-
-    # добавляем персональное унижение
-    if user_memory:
-        last = user_memory[-1]
-        pred += f"\n\nи да, '{last}' — это было особенно тупо"
-
-    # усиление токсичности
-    if lvl > 5:
-        pred += "\nты реально не учишься"
-    if lvl > 8:
-        pred += "\nэто даже не смешно уже"
-
-    return card, rarity, pred
-
-# 🎴 выдача карты
+# 🎴 отправка карты
 async def send_card(message: types.Message):
     user_id = message.from_user.id
-    name = message.from_user.first_name or "ты"
 
     await bot.send_chat_action(message.chat.id, ChatAction.TYPING)
     await asyncio.sleep(random.uniform(1, 2))
 
-    card, rarity, pred = generate_prediction(user_id, name)
+    card = generate_card()
+    prediction = generate_prediction(user_id)
 
-    text = f"🃏 {card}\n💎 Редкость: {rarity}\n\n🔮 {pred}"
+    prompt = f"{card}, {prediction}"
 
-    img = await get_image()
+    img = await generate_cursed_image(prompt)
+
+    text = f"🃏 {card}\n\n🔮 {prediction}"
 
     if img:
-        photo = BufferedInputFile(img.read(), filename="card.jpg")
+        photo = BufferedInputFile(img.read(), filename="cursed.jpg")
         await message.answer_photo(photo=photo, caption=text)
     else:
-        await message.answer(text)
+        await message.answer(text + "\n(даже картинка не захотела появляться)")
 
 # 🚀 старт
 @dp.message(CommandStart())
 async def start(message: types.Message):
-    user_id = message.from_user.id
-    active_users.add(user_id)
+    active_users.add(message.from_user.id)
 
     await message.answer(
-        "я буду предсказывать твою судьбу\nи тебе это не понравится",
+        "я покажу тебе то, что лучше не видеть",
         reply_markup=keyboard
     )
 
 # 🎰 кнопка
-@dp.message(lambda m: m.text == "🔮 узнать свою жалкую судьбу")
+@dp.message(lambda m: m.text == "🔮 получить проклятие")
 async def spin(message: types.Message):
     user_id = message.from_user.id
-
-    level[user_id] = level.get(user_id, 1) + 1
     active_users.add(user_id)
 
     await send_card(message)
@@ -135,13 +118,14 @@ async def spin(message: types.Message):
 @dp.message()
 async def remember(message: types.Message):
     user_id = message.from_user.id
+    active_users.add(user_id)
 
     memory.setdefault(user_id, []).append(message.text)
 
-    if len(memory[user_id]) > 30:
+    if len(memory[user_id]) > 50:
         memory[user_id].pop(0)
 
-    await message.answer("запомнил. зря ты это написал.", reply_markup=keyboard)
+    await message.answer("я это запомнил", reply_markup=keyboard)
 
 # 👁 инициатива
 async def watcher():
@@ -154,9 +138,9 @@ async def watcher():
         user_id = random.choice(list(active_users))
 
         text = random.choice([
-            "я всё ещё думаю о твоём последнем решении",
-            "ты ведь понимаешь, что всё пошло не туда?",
-            "интересно, ты уже пожалел?",
+            "я всё ещё думаю о тебе",
+            "ты не должен был это видеть",
+            "это только начало",
         ])
 
         try:
