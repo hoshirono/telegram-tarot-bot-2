@@ -1,107 +1,108 @@
-import logging
+import asyncio
 import random
 import os
 
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from aiogram.utils import executor
+from aiogram.filters import CommandStart
 from openai import OpenAI
 
-logging.basicConfig(level=logging.INFO)
-
+# 🔑 ключи из Railway
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
+# 🤖 клиенты
 bot = Bot(token=TELEGRAM_TOKEN)
-dp = Dispatcher(bot)
-
+dp = Dispatcher()
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# ===== СТИЛИ =====
+# 🎨 стили
 STYLES = [
     "dark tarot",
     "cute anime tarot",
     "absurd meme tarot"
 ]
 
-# ===== РЕДКОСТЬ =====
-def get_rarity():
-    roll = random.randint(1, 100)
-    if roll <= 70:
-        return "обычная карта"
-    elif roll <= 95:
-        return "редкая карта"
-    else:
-        return "проклятая 😈"
+# 💎 редкость
+RARITY = [
+    ("обычная карта", "common"),
+    ("редкая карта", "rare"),
+    ("проклятая 😈", "cursed")
+]
 
-# ===== КНОПКИ =====
-menu = ReplyKeyboardMarkup(resize_keyboard=True)
-menu.add(
-    KeyboardButton("❤️ Любовь"),
-    KeyboardButton("💰 Деньги"),
-    KeyboardButton("🔮 Будущее")
-)
-
-# ===== GPT ТЕКСТ =====
-def generate_text(theme, rarity):
+# 🧠 генерация текста
+async def generate_text(style, rarity):
     prompt = f"""
 Ты мистический таролог.
 
-Тема: {theme}
-Редкость карты: {rarity}
+Создай короткое предсказание для таро карты.
+Стиль: {style}
+Редкость: {rarity}
 
-Сделай короткое, атмосферное предсказание (1-2 предложения).
+Сделай текст атмосферным, загадочным и коротким (1-2 предложения).
 """
 
     response = client.chat.completions.create(
-        model="gpt-4.1-mini",
+        model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}]
     )
 
     return response.choices[0].message.content
 
-# ===== СТАРТ =====
-@dp.message_handler(commands=['start'])
-async def start(message: types.Message):
-    await message.answer(
-        "🔮 Выбери тему гадания:",
-        reply_markup=menu
-    )
 
-# ===== ОБРАБОТКА КНОПОК =====
-@dp.message_handler(lambda message: message.text in ["❤️ Любовь", "💰 Деньги", "🔮 Будущее"])
-async def tarot(message: types.Message):
-    theme = message.text
-    style = random.choice(STYLES)
-    rarity = get_rarity()
+# 🎨 генерация картинки
+async def generate_image(style, rarity):
+    prompt = f"{style}, tarot card, {rarity}, mystical, detailed, high quality"
 
-    await message.answer("🔮 Вытягиваю карту...")
-
-    # === текст от GPT ===
-    text_msg = generate_text(theme, rarity)
-
-    # === картинка ===
-    prompt = f"{style}, tarot card about {theme}, {rarity}, mystical, detailed"
-
-    image = client.images.generate(
+    img = client.images.generate(
         model="gpt-image-1",
         prompt=prompt,
         size="1024x1024"
     )
 
-    image_url = image.data[0].url
+    return img.data[0].url
+
+
+# 🚀 старт
+@dp.message(CommandStart())
+async def start(message: types.Message):
+    await message.answer("🔮 Нажми /card чтобы получить карту судьбы")
+
+
+# 🎴 команда карты
+@dp.message(lambda message: message.text == "/card")
+async def card(message: types.Message):
+    await message.answer("🔮 Твоя карта генерируется...")
+
+    style = random.choice(STYLES)
+    rarity_text, rarity_key = random.choice(RARITY)
+
+    # генерим
+    text = await generate_text(style, rarity_text)
+    image_url = await generate_image(style, rarity_key)
 
     caption = f"""
-🎴 {theme}
+🔮 Твоя карта:
 
 🎨 Стиль: {style}
-🧠 Редкость: {rarity}
+💎 Уровень: {rarity_text}
 
-💬 {text_msg}
+🧠 {text}
 """
 
     await message.answer_photo(photo=image_url, caption=caption)
 
-# ===== ЗАПУСК =====
+
+# 🧪 тест
+@dp.message()
+async def test(message: types.Message):
+    await message.answer("Напиши /card 😎")
+
+
+# ▶️ запуск
+async def main():
+    print("Бот запущен 🚀")
+    await dp.start_polling(bot)
+
+
 if __name__ == "__main__":
-    executor.start_polling(dp, skip_updates=True)
+    asyncio.run(main())
