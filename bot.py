@@ -9,7 +9,8 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
-# 🔑 переменные
+# ================= НАСТРОЙКИ =================
+
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 HF_TOKEN = os.getenv("HF_TOKEN")
 
@@ -32,9 +33,7 @@ def save_data(data):
 
 def get_user(data, user_id):
     if user_id not in data:
-        data[user_id] = {
-            "cards": []
-        }
+        data[user_id] = {"cards": []}
     return data[user_id]
 
 # ================= UI =================
@@ -48,7 +47,7 @@ def main_keyboard():
         resize_keyboard=True
     )
 
-# ================= ГЕНЕРАЦИЯ =================
+# ================= ЛОГИКА =================
 
 def gen_name():
     a = ["Император","Жрица","Рыцарь","Дьявол","Маг","Скелет","Кот","Пельмень"]
@@ -64,10 +63,11 @@ def gen_text():
         "Это знак… плохой знак."
     ])
 
-# 🎨 генерация картинки через HuggingFace
+# ================= ГЕНЕРАЦИЯ КАРТИНКИ =================
+
 def generate_image(prompt):
     if not HF_TOKEN:
-        print("Нет HF_TOKEN")
+        print("❌ Нет HF_TOKEN")
         return None
 
     API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
@@ -81,9 +81,9 @@ def generate_image(prompt):
             timeout=60
         )
 
-        # если модель "спит"
+        # если модель спит
         if response.status_code == 503:
-            print("Модель спит, ждём...")
+            print("⏳ Модель спит, ждём...")
             time.sleep(10)
             response = requests.post(
                 API_URL,
@@ -93,7 +93,7 @@ def generate_image(prompt):
             )
 
         if response.status_code != 200:
-            print("Ошибка HF:", response.text)
+            print("❌ HF ошибка:", response.text)
             return None
 
         file_path = "card.png"
@@ -103,7 +103,7 @@ def generate_image(prompt):
         return file_path
 
     except Exception as e:
-        print("Ошибка генерации:", e)
+        print("❌ Ошибка генерации:", e)
         return None
 
 # ================= ХЕНДЛЕРЫ =================
@@ -119,7 +119,7 @@ async def start(message: types.Message):
         reply_markup=main_keyboard()
     )
 
-# 🔮 получить карту
+# 🔮 ПОЛУЧИТЬ КАРТУ (без зависания)
 @dp.message(lambda m: m.text == "🔮 Получить карту")
 async def get_card(message: types.Message):
     await message.answer("🎨 Генерирую карту...")
@@ -131,11 +131,14 @@ async def get_card(message: types.Message):
     text = gen_text()
 
     prompt = f"""
-tarot card, {name}, dark fantasy, mystical, ultra detailed,
-ornate frame, glowing symbols, cinematic lighting, masterpiece
+tarot card, {name}, dark fantasy, mystical,
+ultra detailed, ornate frame, glowing symbols,
+cinematic lighting, masterpiece
 """
 
-    img_path = generate_image(prompt)
+    # 🔥 ВАЖНО: убираем зависание
+    loop = asyncio.get_event_loop()
+    img_path = await loop.run_in_executor(None, generate_image, prompt)
 
     if img_path:
         photo = types.FSInputFile(img_path)
@@ -151,7 +154,7 @@ ornate frame, glowing symbols, cinematic lighting, masterpiece
     user["cards"].append(name)
     save_data(data)
 
-# 📦 коллекция
+# 📦 КОЛЛЕКЦИЯ
 @dp.message(lambda m: m.text == "📦 Моя коллекция")
 async def collection(message: types.Message):
     data = load_data()
@@ -161,8 +164,13 @@ async def collection(message: types.Message):
         await message.answer("📦 У тебя пока нет карт")
         return
 
-    text = "\n".join(user["cards"][-10:])
-    await message.answer(f"📦 Твои карты:\n{text}")
+    cards = "\n".join(user["cards"][-10:])
+    await message.answer(f"📦 Твои карты:\n{cards}")
+
+# 🧪 DEBUG (если что-то сломается)
+@dp.message()
+async def debug(message: types.Message):
+    await message.answer("я жив 😈")
 
 # ================= ЗАПУСК =================
 
