@@ -1,10 +1,10 @@
 import asyncio
 import random
 import os
-import requests
 import time
 from io import BytesIO
 
+import aiohttp
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
@@ -28,13 +28,6 @@ keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# 📸 fallback (всегда работают)
-FALLBACK_IMAGES = [
-    "https://images.unsplash.com/photo-1509248961158-e54f6934749c",
-    "https://images.unsplash.com/photo-1495567720989-cebdbdd97913",
-    "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee",
-]
-
 PHOTO_QUERIES = [
     "creepy dark person",
     "abandoned horror building",
@@ -42,48 +35,54 @@ PHOTO_QUERIES = [
     "shadow figure",
 ]
 
-# 📸 получение картинки (СТАБИЛЬНО)
-def get_photo_bytes():
-    url = "https://api.unsplash.com/photos/random"
+FALLBACK_IMAGES = [
+    "https://images.unsplash.com/photo-1509248961158-e54f6934749c",
+    "https://images.unsplash.com/photo-1495567720989-cebdbdd97913",
+]
 
-    headers = {
-        "Authorization": f"Client-ID {UNSPLASH_KEY}"
-    }
+# 📸 async загрузка картинки
+async def get_photo_bytes():
+    async with aiohttp.ClientSession() as session:
 
-    for _ in range(3):  # 3 попытки
+        # пробуем API
+        for _ in range(2):
+            try:
+                url = "https://api.unsplash.com/photos/random"
+
+                headers = {
+                    "Authorization": f"Client-ID {UNSPLASH_KEY}"
+                }
+
+                params = {
+                    "query": random.choice(PHOTO_QUERIES),
+                    "orientation": "square"
+                }
+
+                async with session.get(url, headers=headers, params=params, timeout=5) as r:
+                    if r.status == 200:
+                        data = await r.json()
+
+                        img_url = data.get("urls", {}).get("regular")
+                        if not img_url:
+                            continue
+
+                        async with session.get(img_url, timeout=5) as img:
+                            if img.status == 200:
+                                return BytesIO(await img.read())
+
+            except:
+                continue
+
+        # fallback
         try:
-            params = {
-                "query": random.choice(PHOTO_QUERIES),
-                "orientation": "square"
-            }
-
-            r = requests.get(url, headers=headers, params=params, timeout=10)
-
-            if r.status_code == 200:
-                data = r.json()
-
-                if "urls" not in data:
-                    continue
-
-                img_url = data["urls"].get("regular")
-                if not img_url:
-                    continue
-
-                img = requests.get(img_url, timeout=10)
-
-                if img.status_code == 200:
-                    return BytesIO(img.content)
-
+            fallback = random.choice(FALLBACK_IMAGES)
+            async with session.get(fallback, timeout=5) as img:
+                if img.status == 200:
+                    return BytesIO(await img.read())
         except:
-            continue
+            return None
 
-    # 💀 fallback если всё сломалось
-    try:
-        fallback = random.choice(FALLBACK_IMAGES)
-        img = requests.get(fallback, timeout=10)
-        return BytesIO(img.content)
-    except:
-        return None
+    return None
 
 # 👁 слежка
 def observer(user_id):
@@ -125,29 +124,33 @@ def generate_text(name, memory, level):
 
 # 🎴 генерация
 async def generate_card(message: types.Message):
-    user_id = message.from_user.id
-    name = message.from_user.first_name or "ты"
+    try:
+        user_id = message.from_user.id
+        name = message.from_user.first_name or "ты"
 
-    memory = user_memory.get(user_id, [])
-    level = user_level.get(user_id, 1)
+        memory = user_memory.get(user_id, [])
+        level = user_level.get(user_id, 1)
 
-    # ⏳ печатает
-    await bot.send_chat_action(message.chat.id, ChatAction.TYPING)
-    await asyncio.sleep(random.uniform(1.5, 3.0))
+        await bot.send_chat_action(message.chat.id, ChatAction.TYPING)
+        await asyncio.sleep(random.uniform(1.0, 2.0))
 
-    text = generate_text(name, memory, level)
-    obs = observer(user_id)
+        text = generate_text(name, memory, level)
+        obs = observer(user_id)
 
-    if obs:
-        text = f"{obs}. {text}"
+        if obs:
+            text = f"{obs}. {text}"
 
-    img_bytes = get_photo_bytes()
+        img_bytes = await get_photo_bytes()
 
-    if img_bytes:
-        img_bytes.name = "photo.jpg"
-        await message.answer_photo(photo=img_bytes, caption=f"💀 {text}")
-    else:
-        await message.answer(f"💀 {text} (даже картинку не получилось найти...)")
+        if img_bytes:
+            img_bytes.name = "photo.jpg"
+            await message.answer_photo(photo=img_bytes, caption=f"💀 {text}")
+        else:
+            await message.answer(f"💀 {text}")
+
+    except Exception as e:
+        print("ERROR:", e)
+        await message.answer("💀 что-то пошло не так...")
 
 # 🚀 старт
 @dp.message(CommandStart())
@@ -173,42 +176,39 @@ async def memory_handler(message: types.Message):
     user_id = message.from_user.id
     active_users.add(user_id)
 
-    if user_id not in user_memory:
-        user_memory[user_id] = []
-
-    user_memory[user_id].append(message.text)
+    user_memory.setdefault(user_id, []).append(message.text)
 
     if len(user_memory[user_id]) > 50:
         user_memory[user_id].pop(0)
 
     await message.answer("я это запомнил", reply_markup=keyboard)
 
-# 👁 инициатива
+# 👁 инициатива (без краша)
 async def watcher():
     while True:
-        await asyncio.sleep(random.randint(60, 180))
-
-        if not active_users:
-            continue
-
-        user_id = random.choice(list(active_users))
-
-        text = random.choice([
-            "ты опять здесь?",
-            "я думаю о тебе",
-            "ты не закончил",
-            "это всё ещё с тобой",
-            "я помню, что ты писал"
-        ])
-
         try:
+            await asyncio.sleep(random.randint(60, 120))
+
+            if not active_users:
+                continue
+
+            user_id = random.choice(list(active_users))
+
+            text = random.choice([
+                "ты опять здесь?",
+                "я думаю о тебе",
+                "ты не закончил",
+                "я помню"
+            ])
+
             await bot.send_message(user_id, f"👁 {text}")
-        except:
-            pass
+
+        except Exception as e:
+            print("WATCHER ERROR:", e)
 
 # ▶️ запуск
 async def main():
-    print("👁 бот наблюдает")
+    print("👁 бот жив")
     asyncio.create_task(watcher())
     await dp.start_polling(bot)
 
