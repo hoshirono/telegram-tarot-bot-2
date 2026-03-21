@@ -2,12 +2,12 @@ import asyncio
 import random
 import os
 import urllib.parse
+import requests
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
-# 🔑 токен
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 bot = Bot(token=TELEGRAM_TOKEN)
@@ -24,7 +24,7 @@ keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# 🃏 карты (сразу с норм визуальным смыслом)
+# 🃏 карты
 CARDS = [
     "Skeleton office manager in suit",
     "Cat prophet with glowing eyes",
@@ -35,7 +35,7 @@ CARDS = [
     "Dark tarot jester laughing"
 ]
 
-# 🔮 предсказания
+# 🔮 тексты
 TEXTS = [
     "Ты выбрал худший путь, и это нормально.",
     "Вселенная наблюдает за тобой с недоумением.",
@@ -48,9 +48,9 @@ TEXTS = [
 
 # 🎨 стили
 STYLES = [
-    "dark gothic tarot card, ultra detailed, masterpiece",
-    "anime tarot card, glowing, beautiful, detailed",
-    "surreal absurd tarot card, weirdcore, dreamlike"
+    "dark gothic tarot card",
+    "anime tarot card",
+    "surreal weird tarot card"
 ]
 
 # 💎 редкость
@@ -61,21 +61,23 @@ RARITY = [
 ]
 
 
-# 🎨 генерация картинки через Pollinations (БЕСПЛАТНО)
-def generate_image(card_name, text, style, rarity):
+# 🎨 генерация URL
+def generate_image_url(card, text, style, rarity):
     prompt = f"""
-    tarot card illustration,
-    {card_name},
-    {text},
-    {style},
-    {rarity},
-    centered composition,
-    mystical, highly detailed, dramatic lighting,
-    fantasy art, masterpiece
+    tarot card, {card}, {text}, {style}, {rarity},
+    centered composition, detailed, fantasy, masterpiece
     """
+    return "https://image.pollinations.ai/prompt/" + urllib.parse.quote(prompt)
 
-    url = "https://image.pollinations.ai/prompt/" + urllib.parse.quote(prompt)
-    return url
+
+# 📥 скачивание картинки
+def download_image(url):
+    try:
+        response = requests.get(url, timeout=15)
+        if response.status_code == 200:
+            return response.content
+    except:
+        return None
 
 
 # 🚀 старт
@@ -97,7 +99,10 @@ async def spin(message: types.Message):
     style = random.choice(STYLES)
     rarity_text, rarity_prompt = random.choice(RARITY)
 
-    image_url = generate_image(card, text, style, rarity_prompt)
+    url = generate_image_url(card, text, style, rarity_prompt)
+
+    # ⬇️ скачиваем
+    image_bytes = download_image(url)
 
     caption = f"""
 🃏 {card}
@@ -107,48 +112,40 @@ async def spin(message: types.Message):
 🔮 {text}
 """
 
-    try:
+    if image_bytes:
         await message.answer_photo(
-            photo=image_url,
+            photo=types.BufferedInputFile(image_bytes, filename="card.png"),
             caption=caption,
             reply_markup=keyboard
         )
-    except:
+    else:
         await message.answer(
-            caption + "\n⚠️ (арт не загрузился)",
+            caption + "\n⚠️ арт не загрузился",
             reply_markup=keyboard
         )
 
 
-# ⚔️ PvP
+# остальные кнопки
 @dp.message(lambda m: m.text == "⚔️ PvP")
 async def pvp(message: types.Message):
-    await message.answer("⚔️ PvP скоро будет 💀", reply_markup=keyboard)
+    await message.answer("⚔️ PvP скоро будет", reply_markup=keyboard)
 
-
-# 🧬 Синтез
 @dp.message(lambda m: m.text == "🧬 Синтез")
 async def craft(message: types.Message):
-    await message.answer("🧬 Синтез карт в разработке 😈", reply_markup=keyboard)
+    await message.answer("🧬 Синтез в разработке", reply_markup=keyboard)
 
-
-# 📦 Коллекция
 @dp.message(lambda m: m.text == "📦 Коллекция")
 async def collection(message: types.Message):
-    await message.answer("📦 Коллекция пока пустая 😭", reply_markup=keyboard)
+    await message.answer("📦 Коллекция пока пустая", reply_markup=keyboard)
 
-
-# 📊 Стата
 @dp.message(lambda m: m.text == "📊 Стата")
 async def stats(message: types.Message):
-    await message.answer("📊 Стата скоро появится", reply_markup=keyboard)
+    await message.answer("📊 Скоро будет", reply_markup=keyboard)
 
-
-# 🎁 Дейлик
 @dp.message(lambda m: m.text == "🎁 Дейлик")
 async def daily(message: types.Message):
     coins = random.randint(50, 200)
-    await message.answer(f"🎁 Ты получил {coins} монет 💰", reply_markup=keyboard)
+    await message.answer(f"🎁 +{coins} монет", reply_markup=keyboard)
 
 
 # ▶️ запуск
