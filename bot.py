@@ -26,13 +26,15 @@ last_auto = {}
 
 active_users = set()
 
+BUTTON_TEXT = "накаркай, гад 🐦‍⬛️"
+
 keyboard = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text="💀 ну давай че там покажи дичь")]],
+    keyboard=[[KeyboardButton(text=BUTTON_TEXT)]],
     resize_keyboard=True
 )
 
 # =======================
-# 🧠 ПАМЯТЬ
+# 🧠 ПАМЯТЬ (ТОЛЬКО РУЧНЫЕ СООБЩЕНИЯ)
 # =======================
 
 def remember_user(user_id, text):
@@ -49,7 +51,7 @@ def remember_user(user_id, text):
 
 
 # =======================
-# 😈 СТИЛЬ ПОЛЬЗОВАТЕЛЯ
+# 😈 СТИЛЬ
 # =======================
 
 def mimic_style(user_id, text):
@@ -58,11 +60,9 @@ def mimic_style(user_id, text):
 
     samples = memory[user_id]
 
-    # если пишет без заглавных — бот тоже
-    if all(s.lower() == s for s in samples[-5:]):
+    if samples and all(s.lower() == s for s in samples[-5:]):
         text = text.lower()
 
-    # если мат — добавляем мат
     if any("хуй" in s or "бля" in s for s in samples):
         text += random.choice([
             " да, именно так",
@@ -75,7 +75,7 @@ def mimic_style(user_id, text):
 
 
 # =======================
-# 💀 ИСКАЖЕНИЕ ФРАЗ
+# 💀 ИСКАЖЕНИЕ
 # =======================
 
 def distort_phrase(text):
@@ -91,7 +91,7 @@ def distort_phrase(text):
 
 
 # =======================
-# 😈 ГЕНЕРАЦИЯ СООБЩЕНИЯ
+# 😈 ГЕНЕРАЦИЯ
 # =======================
 
 def generate_mock(user_id):
@@ -125,7 +125,7 @@ def generate_mock(user_id):
 
 def get_random_image():
     if not os.path.exists(IMAGE_FOLDER):
-        print("нет папки:", IMAGE_FOLDER)
+        print("❌ нет папки:", IMAGE_FOLDER)
         return None
 
     files = [
@@ -134,7 +134,7 @@ def get_random_image():
     ]
 
     if not files:
-        print("нет файлов")
+        print("❌ нет файлов")
         return None
 
     path = os.path.join(IMAGE_FOLDER, random.choice(files))
@@ -171,19 +171,20 @@ async def start(message: types.Message):
 
 
 # =======================
-# 🎰 КНОПКА
+# 🎰 КНОПКА (ТОЛЬКО ФОТО)
 # =======================
 
-@dp.message(lambda m: m.text == "накаркай, гад 🐦‍⬛️")
+@dp.message(lambda m: m.text == BUTTON_TEXT)
 async def spin(message: types.Message):
     user_id = message.from_user.id
     active_users.add(user_id)
 
+    # ❗ НИКАКОЙ ПАМЯТИ / СТИЛЯ / ЛОГИКИ
     await send_image(message)
 
 
 # =======================
-# 🧠 СООБЩЕНИЯ ПОЛЬЗОВАТЕЛЯ
+# 🧠 ОБЫЧНЫЕ СООБЩЕНИЯ (ТОЛЬКО ТУТ ПАМЯТЬ)
 # =======================
 
 @dp.message()
@@ -191,12 +192,16 @@ async def handle(message: types.Message):
     user_id = message.from_user.id
     active_users.add(user_id)
 
+    # ❗ защита: если вдруг кнопка прошла сюда
+    if message.text == BUTTON_TEXT:
+        return
+
     remember_user(user_id, message.text)
 
     now = time.time()
     last_seen[user_id] = now
 
-    # шанс мгновенного ответа
+    # шанс ответа
     if random.random() < 0.5:
         await message.answer(generate_mock(user_id), reply_markup=keyboard)
 
@@ -216,7 +221,7 @@ async def watcher():
             last = last_seen.get(user_id, 0)
             last_auto_msg = last_auto.get(user_id, 0)
 
-            # 📡 реакция после активности (очень важно)
+            # 📡 реакция после активности
             if now - last < 60 and now - last_auto_msg > 300:
                 try:
                     text = generate_mock(user_id)
@@ -226,13 +231,13 @@ async def watcher():
                     pass
                 continue
 
-            # 🌙 ночная крипота
+            # 🌙 ночь
             if 2 <= hour <= 5 and now - last_auto_msg > 21600:
                 try:
                     creepy = random.choice([
                         "ты не один",
                         "я вижу тебя",
-                        "оно тоже здесь",
+                        "оно здесь",
                         "не смотри назад",
                         "ты проснулся?"
                     ])
