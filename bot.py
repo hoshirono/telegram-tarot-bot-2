@@ -1,12 +1,16 @@
 import asyncio
 import random
 import os
+import base64
+from io import BytesIO
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
+from aiogram.types import BufferedInputFile
+
 from openai import OpenAI
 
-# 🔑 ключи из Railway
+# 🔑 ключи
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
@@ -49,7 +53,7 @@ def generate_text(style, rarity):
     return response.choices[0].message.content
 
 
-# 🎨 генерация картинки
+# 🎨 генерация картинки (фикс!)
 def generate_image(style, rarity):
     prompt = f"{style}, tarot card, {rarity}, mystical, detailed, high quality"
 
@@ -59,7 +63,10 @@ def generate_image(style, rarity):
         size="1024x1024"
     )
 
-    return img.data[0].url
+    image_base64 = img.data[0].b64_json
+    image_bytes = base64.b64decode(image_base64)
+
+    return BytesIO(image_bytes)
 
 
 # 🚀 старт
@@ -68,19 +75,19 @@ async def start(message: types.Message):
     await message.answer("🔮 Нажми /card чтобы получить карту судьбы")
 
 
-# 🎴 команда карты
+# 🎴 карта
 @dp.message(lambda message: message.text == "/card")
 async def card(message: types.Message):
     await message.answer("🔮 Твоя карта генерируется...")
 
-    style = random.choice(STYLES)
-    rarity_text, rarity_key = random.choice(RARITY)
+    try:
+        style = random.choice(STYLES)
+        rarity_text, rarity_key = random.choice(RARITY)
 
-    # генерим
-    text = generate_text(style, rarity_text)
-    image_url = generate_image(style, rarity_key)
+        text = generate_text(style, rarity_text)
+        image = generate_image(style, rarity_key)
 
-    caption = f"""
+        caption = f"""
 🔮 Твоя карта:
 
 🎨 Стиль: {style}
@@ -89,12 +96,18 @@ async def card(message: types.Message):
 🧠 {text}
 """
 
-    await message.answer_photo(photo=image_url, caption=caption)
+        await message.answer_photo(
+            photo=BufferedInputFile(image.read(), filename="tarot.png"),
+            caption=caption
+        )
+
+    except Exception as e:
+        await message.answer(f"❌ Ошибка:\n{e}")
 
 
-# 🧪 тест
+# 🧪 fallback
 @dp.message()
-async def test(message: types.Message):
+async def fallback(message: types.Message):
     await message.answer("Напиши /card 😎")
 
 
