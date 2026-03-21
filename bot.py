@@ -11,50 +11,129 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 
+# 🎮 КНОПКИ (как ты хотел)
 keyboard = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="🔮 Получить карту")]
+        [KeyboardButton(text="🎰 Крутить")],
+        [KeyboardButton(text="⚔️ PvP"), KeyboardButton(text="🧬 Синтез")],
+        [KeyboardButton(text="📦 Коллекция"), KeyboardButton(text="📊 Стата")],
+        [KeyboardButton(text="🎁 Дейлик")]
     ],
     resize_keyboard=True
 )
 
+# 🃏 КАРТЫ
 CARDS = [
     "Пельмень Wi-Fi",
     "Скелет-менеджер",
-    "Кот-пророк"
+    "Кот-пророк",
+    "Бог кредитов",
+    "Демон будильника",
+    "Жрец вайба",
+    "Лорд случайных решений"
 ]
 
+# 🔮 ПРЕДСКАЗАНИЯ (жестче 😈)
 TEXTS = [
     "Ты выбрал худший путь, и это нормально.",
-    "Вселенная в ахуе от тебя.",
-    "Ты победишь. Но случайно."
+    "Вселенная смотрит на тебя и медленно офигевает.",
+    "Ты победишь. Но это будет максимально тупо.",
+    "Сегодня ты сломаешь что-то важное. Возможно себя.",
+    "Ты уже облажался. Осталось принять это красиво.",
+    "Судьба дала тебе шанс. Ты его проигнорируешь.",
+    "Ты легенда. Но в плохом смысле."
 ]
 
+# 🖼 БОЛЬШОЙ ПУЛ КАРТИНОК (разные)
 IMAGES = [
-    "https://picsum.photos/512",
-    "https://placekitten.com/512/512",
-    "https://placebear.com/512/512"
+    "https://picsum.photos/seed/1/512",
+    "https://picsum.photos/seed/2/512",
+    "https://picsum.photos/seed/3/512",
+    "https://picsum.photos/seed/4/512",
+    "https://picsum.photos/seed/5/512",
+    "https://picsum.photos/seed/6/512",
+    "https://picsum.photos/seed/7/512",
+    "https://picsum.photos/seed/8/512",
+    "https://picsum.photos/seed/9/512",
+    "https://picsum.photos/seed/10/512"
 ]
 
-@dp.message(CommandStart())
-async def start(message: types.Message):
-    await message.answer("Бот жив 👀", reply_markup=keyboard)
+# чтобы не повторялись подряд
+last_image = None
 
-@dp.message(lambda m: "Получить карту" in m.text)
-async def card(message: types.Message):
-    name = random.choice(CARDS)
-    text = random.choice(TEXTS)
+
+def get_unique_image():
+    global last_image
     img = random.choice(IMAGES)
 
-    await message.answer_photo(
-        photo=img,
-        caption=f"🃏 {name}\n\n🔮 {text}",
+    while img == last_image:
+        img = random.choice(IMAGES)
+
+    last_image = img
+    return img
+
+
+# 🚀 старт
+@dp.message(CommandStart())
+async def start(message: types.Message):
+    await message.answer(
+        "💀 ULTIMATE TAROT ONLINE\n\nВыбирай действие 👇",
         reply_markup=keyboard
     )
 
+
+# 🎰 крутка
+@dp.message(lambda m: m.text == "🎰 Крутить")
+async def spin(message: types.Message):
+    await message.answer("🎨 Генерирую карту...")
+
+    card = random.choice(CARDS)
+    text = random.choice(TEXTS)
+    img = get_unique_image()
+
+    await message.answer_photo(
+        photo=img,
+        caption=f"🃏 {card}\n\n🔮 {text}",
+        reply_markup=keyboard
+    )
+
+
+# ⚔️ PvP
+@dp.message(lambda m: m.text == "⚔️ PvP")
+async def pvp(message: types.Message):
+    await message.answer("⚔️ PvP скоро будет 💀", reply_markup=keyboard)
+
+
+# 🧬 Синтез
+@dp.message(lambda m: m.text == "🧬 Синтез")
+async def craft(message: types.Message):
+    await message.answer("🧬 Синтез карт в разработке 😈", reply_markup=keyboard)
+
+
+# 📦 Коллекция
+@dp.message(lambda m: m.text == "📦 Коллекция")
+async def collection(message: types.Message):
+    await message.answer("📦 У тебя пока нет коллекции 😭", reply_markup=keyboard)
+
+
+# 📊 Стата
+@dp.message(lambda m: m.text == "📊 Стата")
+async def stats(message: types.Message):
+    await message.answer("📊 Стата скоро появится", reply_markup=keyboard)
+
+
+# 🎁 Дейлик
+@dp.message(lambda m: m.text == "🎁 Дейлик")
+async def daily(message: types.Message):
+    coins = random.randint(50, 200)
+    await message.answer(f"🎁 Ты получил {coins} монет 💰", reply_markup=keyboard)
+
+
+# ▶️ запуск
 async def main():
-    print("BOT STARTED")
+    print("Бот запущен 🚀")
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
