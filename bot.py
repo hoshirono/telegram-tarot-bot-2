@@ -1,17 +1,19 @@
 import asyncio
 import random
 import os
+import urllib.parse
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
+# 🔑 токен
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 
-# 🎮 КНОПКИ (как ты хотел)
+# 🎮 кнопки
 keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🎰 Крутить")],
@@ -22,55 +24,58 @@ keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# 🃏 КАРТЫ
+# 🃏 карты (сразу с норм визуальным смыслом)
 CARDS = [
-    "Пельмень Wi-Fi",
-    "Скелет-менеджер",
-    "Кот-пророк",
-    "Бог кредитов",
-    "Демон будильника",
-    "Жрец вайба",
-    "Лорд случайных решений"
+    "Skeleton office manager in suit",
+    "Cat prophet with glowing eyes",
+    "God of debts on golden throne",
+    "Alarm clock demon with fire aura",
+    "Cyber dumpling with wifi signal",
+    "Surreal meme wizard floating",
+    "Dark tarot jester laughing"
 ]
 
-# 🔮 ПРЕДСКАЗАНИЯ (жестче 😈)
+# 🔮 предсказания
 TEXTS = [
     "Ты выбрал худший путь, и это нормально.",
-    "Вселенная смотрит на тебя и медленно офигевает.",
-    "Ты победишь. Но это будет максимально тупо.",
-    "Сегодня ты сломаешь что-то важное. Возможно себя.",
-    "Ты уже облажался. Осталось принять это красиво.",
-    "Судьба дала тебе шанс. Ты его проигнорируешь.",
-    "Ты легенда. Но в плохом смысле."
+    "Вселенная наблюдает за тобой с недоумением.",
+    "Ты победишь. Но максимально странным способом.",
+    "Сегодня ты сделаешь ошибку. И это тебя спасёт.",
+    "Ты уже зашёл слишком далеко. Продолжай.",
+    "Судьба дала тебе шанс, но ты его не заметил.",
+    "Ты станешь легендой. Но не так как хотел."
 ]
 
-# 🖼 БОЛЬШОЙ ПУЛ КАРТИНОК (разные)
-IMAGES = [
-    "https://picsum.photos/seed/1/512",
-    "https://picsum.photos/seed/2/512",
-    "https://picsum.photos/seed/3/512",
-    "https://picsum.photos/seed/4/512",
-    "https://picsum.photos/seed/5/512",
-    "https://picsum.photos/seed/6/512",
-    "https://picsum.photos/seed/7/512",
-    "https://picsum.photos/seed/8/512",
-    "https://picsum.photos/seed/9/512",
-    "https://picsum.photos/seed/10/512"
+# 🎨 стили
+STYLES = [
+    "dark gothic tarot card, ultra detailed, masterpiece",
+    "anime tarot card, glowing, beautiful, detailed",
+    "surreal absurd tarot card, weirdcore, dreamlike"
 ]
 
-# чтобы не повторялись подряд
-last_image = None
+# 💎 редкость
+RARITY = [
+    ("обычная", "simple"),
+    ("редкая", "glowing magical aura"),
+    ("проклятая 😈", "dark horror cursed energy")
+]
 
 
-def get_unique_image():
-    global last_image
-    img = random.choice(IMAGES)
+# 🎨 генерация картинки через Pollinations (БЕСПЛАТНО)
+def generate_image(card_name, text, style, rarity):
+    prompt = f"""
+    tarot card illustration,
+    {card_name},
+    {text},
+    {style},
+    {rarity},
+    centered composition,
+    mystical, highly detailed, dramatic lighting,
+    fantasy art, masterpiece
+    """
 
-    while img == last_image:
-        img = random.choice(IMAGES)
-
-    last_image = img
-    return img
+    url = "https://image.pollinations.ai/prompt/" + urllib.parse.quote(prompt)
+    return url
 
 
 # 🚀 старт
@@ -89,13 +94,30 @@ async def spin(message: types.Message):
 
     card = random.choice(CARDS)
     text = random.choice(TEXTS)
-    img = get_unique_image()
+    style = random.choice(STYLES)
+    rarity_text, rarity_prompt = random.choice(RARITY)
 
-    await message.answer_photo(
-        photo=img,
-        caption=f"🃏 {card}\n\n🔮 {text}",
-        reply_markup=keyboard
-    )
+    image_url = generate_image(card, text, style, rarity_prompt)
+
+    caption = f"""
+🃏 {card}
+
+💎 Редкость: {rarity_text}
+
+🔮 {text}
+"""
+
+    try:
+        await message.answer_photo(
+            photo=image_url,
+            caption=caption,
+            reply_markup=keyboard
+        )
+    except:
+        await message.answer(
+            caption + "\n⚠️ (арт не загрузился)",
+            reply_markup=keyboard
+        )
 
 
 # ⚔️ PvP
@@ -113,7 +135,7 @@ async def craft(message: types.Message):
 # 📦 Коллекция
 @dp.message(lambda m: m.text == "📦 Коллекция")
 async def collection(message: types.Message):
-    await message.answer("📦 У тебя пока нет коллекции 😭", reply_markup=keyboard)
+    await message.answer("📦 Коллекция пока пустая 😭", reply_markup=keyboard)
 
 
 # 📊 Стата
