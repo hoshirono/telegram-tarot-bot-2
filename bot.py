@@ -6,11 +6,10 @@ from io import BytesIO
 import aiohttp
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InputFile
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, BufferedInputFile
 from aiogram.enums import ChatAction
 
-# 🔑 ВСТАВЬ СЮДА
-TOKEN = "ТВОЙ_ТЕЛЕГРАМ_ТОКЕН"
+TOKEN = "ТВОЙ_ТОКЕН"
 HF_TOKEN = "ТВОЙ_HF_ТОКЕН"
 
 bot = Bot(token=TOKEN)
@@ -19,114 +18,66 @@ dp = Dispatcher()
 memory = {}
 active_users = set()
 last_message_time = {}
+used_predictions = set()  # ✅ фикс
 
 keyboard = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="🔮 ну давай, разъеби мою судьбу")]],
     resize_keyboard=True
 )
 
-# 🧠 генерация сценариев (динамика)
-subjects = [
-    "ты", "твоя жизнь", "твои решения", "твоя неделя",
-    "твой мозг", "твои попытки быть нормальным"
-]
-
-events = [
-    "попытаешься что-то исправить",
-    "решишь, что понял жизнь",
-    "снова сделаешь выбор",
-    "скажешь лишнее",
-    "поверишь в себя (зря)"
-]
-
-failures = [
-    "и всё пойдет по пизде",
-    "и это обернется кринжем",
-    "и будет максимально неловко",
-    "и ты потом будешь это вспоминать ночью",
-    "и это было лишним"
-]
-
-irony = [
-    "но ты будешь делать вид, что так и задумано",
-    "и никто не поверит тебе",
-    "и ты сам не поймешь, зачем это сделал",
-    "и это станет твоим новым дном",
-    "и да, это запомнят"
-]
-
-image_prompts = [
-    "awkward silence, people staring, realistic photo",
-    "man failing in public, embarrassing moment, realistic",
-    "confused person in chaos, weird situation, photo",
-    "person alone at night thinking, depressed realistic",
-    "strange absurd situation, uncanny valley photo"
-]
-
-
-def generate_prediction():
+# 🧠 генерация текста
+def generate_prediction(user_id=None):
     subjects = [
-        "Сегодня", "Эта неделя", "Твоя жизнь", "Судьба", "Вселенная",
-        "Ближайшие дни", "Реальность вокруг тебя"
+        "Сегодня", "Эта неделя", "Твоя жизнь", "Судьба",
+        "Реальность вокруг тебя", "Твои попытки жить нормально"
     ]
 
     actions = [
-        "будет выглядеть как", "превратится в", "станет", "скатится в",
-        "окажется", "раскроется как", "будет ощущаться как"
+        "будет выглядеть как", "превратится в", "станет",
+        "скатится в", "окажется", "будет ощущаться как"
     ]
 
     trash = [
         "бессмысленная хуета",
-        "криво собранный цирк долбоебизма",
-        "затянувшийся фейл без шансов на реабилитацию",
-        "жалкая попытка что-то исправить",
-        "слабая пародия на нормальную жизнь",
-        "хаос, который ты почему-то называешь планом",
-        "дешёвый спектакль, где ты главный клоун",
-        "полный пиздец, но уже привычный",
+        "цирк долбоебизма",
         "медленный краш твоих ожиданий",
-        "то самое дно, которое ты продолжаешь копать"
+        "жалкая попытка всё исправить",
+        "хаос без смысла",
+        "пиздец, но уже привычный"
     ]
 
     endings = [
-        "и самое смешное — ты даже не заметишь, как это началось.",
-        "но ты, конечно, сделаешь вид, что всё под контролем.",
-        "и да, это опять ты виноват.",
-        "но ты уже привык жить в этом режиме.",
-        "и это даже не худший вариант, если честно.",
-        "но ты всё равно ничего не поменяешь.",
-        "и ты снова выберешь самый тупой вариант.",
-        "но давай честно — ты другого и не ожидал.",
-        "и именно в этот момент ты решишь, что всё нормально.",
-        "но это максимум, на который ты сейчас способен."
+        "и ты даже не заметишь, как это началось.",
+        "но ты сделаешь вид, что всё ок.",
+        "и да, ты опять виноват.",
+        "но ты уже привык.",
+        "и ты ничего не поменяешь."
     ]
 
     sarcasm = [
         "Красавчик.",
-        "Стабильность — признак мастерства.",
-        "Ну ты даёшь, конечно.",
-        "Прогресс на лицо. В плохом смысле.",
-        "Держишь планку. Где-то внизу.",
+        "Стабильность.",
+        "Ну ты даёшь.",
         "Это уже стиль жизни.",
-        "Можно было хуже, но ты не стал рисковать.",
-        "Гордиться нечем, но ты и не пытаешься.",
-        "Всё по канону.",
-        "Ну зато не скучно."
+        "Всё по канону."
     ]
 
-    for _ in range(100):
+    for _ in range(200):
         text = f"{random.choice(subjects)} {random.choice(actions)} {random.choice(trash)}, {random.choice(endings)} {random.choice(sarcasm)}"
+
         if text not in used_predictions:
             used_predictions.add(text)
+
+            # персонализация
+            if user_id and user_id in memory and memory[user_id]:
+                user_msg = random.choice(memory[user_id])
+                text += f"\n\nты писал: '{user_msg}' — это многое объясняет."
+
             return text
 
-    return "Даже судьба устала придумывать для тебя новые провалы."
+    return "Даже судьба устала придумывать тебе новые провалы."
 
-def generate_prompt():
-    return random.choice(image_prompts)
-
-
-# 💀 генерация картинки
+# 🖼 генерация картинки
 async def generate_image(prompt):
     try:
         async with aiohttp.ClientSession() as session:
@@ -145,27 +96,31 @@ async def generate_image(prompt):
                 if r.status == 200:
                     data = await r.read()
 
-                    file = BytesIO(data)
-                    file.name = "img.jpg"
-                    file.seek(0)
-
-                    return file
+                    return BufferedInputFile(data, filename="img.jpg")
     except:
         pass
 
     # fallback
-    fallback_url = f"https://picsum.photos/512?random={random.randint(1,10000)}"
+    fallback = f"https://picsum.photos/512?random={random.randint(1,9999)}"
 
     async with aiohttp.ClientSession() as session:
-        async with session.get(fallback_url) as r:
+        async with session.get(fallback) as r:
             data = await r.read()
-            file = BytesIO(data)
-            file.name = "img.jpg"
-            file.seek(0)
-            return file
+            return BufferedInputFile(data, filename="img.jpg")
 
 
-# 🎴 отправка карты
+# 🧠 промпты
+def generate_prompt():
+    return random.choice([
+        "awkward silence, people staring",
+        "man embarrassed in public",
+        "weird surreal situation",
+        "person alone at night sad",
+        "absurd uncanny photo"
+    ])
+
+
+# 🎴 отправка
 async def send_card(message: types.Message):
     await bot.send_chat_action(message.chat.id, ChatAction.TYPING)
     await asyncio.sleep(random.uniform(1, 2))
@@ -173,9 +128,8 @@ async def send_card(message: types.Message):
     prediction = generate_prediction(message.from_user.id)
     prompt = generate_prompt()
 
-    img = await generate_image(prompt)
+    photo = await generate_image(prompt)
 
-    photo = InputFile(img)
     await message.answer_photo(photo=photo, caption=f"🔮 {prediction}")
 
 
@@ -185,7 +139,7 @@ async def start(message: types.Message):
     active_users.add(message.from_user.id)
 
     await message.answer(
-        "я уже здесь.\n\nжми кнопку и посмотрим, насколько всё плохо",
+        "жми кнопку и посмотрим, как ты сегодня облажаешься",
         reply_markup=keyboard
     )
 
@@ -209,12 +163,12 @@ async def remember(message: types.Message):
         memory[user_id].pop(0)
 
     await message.answer(
-        f"ты написал: '{message.text}'\n\nя это запомнил.",
+        f"я запомнил: '{message.text}'",
         reply_markup=keyboard
     )
 
 
-# 👁 инициатива (2 раза в день)
+# 👁 инициатива
 async def watcher():
     while True:
         await asyncio.sleep(60)
@@ -227,11 +181,10 @@ async def watcher():
                 continue
 
             text = random.choice([
-                "я тут подумал о тебе",
-                "ты ведь не забыл про меня?",
-                "знаешь, я всё вижу",
+                "я всё ещё думаю о тебе",
                 "ты странно себя ведёшь",
-                "мне кажется, ты опять что-то сделал не так"
+                "ты ведь не забыл про меня?",
+                "мне кажется, ты снова ошибся"
             ])
 
             try:
