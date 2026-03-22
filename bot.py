@@ -20,12 +20,10 @@ dp = Dispatcher()
 IMAGES_FOLDER = "images"
 
 memory = {}
-user_style = {}
 relation = {}
 active_users = set()
 last_photo_time = {}
-last_seen = {}
-obsession_level = {}
+last_messages = {}
 
 keyboard = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="накаркай, гад 🐦‍⬛️")]],
@@ -35,61 +33,74 @@ keyboard = ReplyKeyboardMarkup(
 # ================== ОБУЧЕНИЕ ==================
 
 def learn(user_id, text):
-    words = re.findall(r'\w+', text.lower())
-
     memory.setdefault(user_id, []).append(text)
-    if len(memory[user_id]) > 30:
+    if len(memory[user_id]) > 10:
         memory[user_id].pop(0)
-
-    user_style.setdefault(user_id, []).extend(words)
-    if len(user_style[user_id]) > 200:
-        user_style[user_id] = user_style[user_id][-200:]
 
     rel = relation.get(user_id, 0)
 
     if any(w in text.lower() for w in ["спасибо", "норм"]):
         rel += 1
-    if any(w in text.lower() for w in ["иди", "заткнись", "бред"]):
+    if any(w in text.lower() for w in ["иди", "тупой", "бред"]):
         rel -= 2
 
     relation[user_id] = max(-10, min(10, rel))
 
-    # рост одержимости
-    obsession_level[user_id] = obsession_level.get(user_id, 0) + 1
 
-# ================== ГЕНЕРАЦИЯ ==================
-
-def distort(text):
-    words = text.split()
-
-    if words and random.random() < 0.3:
-        i = random.randint(0, len(words)-1)
-        words[i] += words[i][-1]
-
-    if random.random() < 0.2:
-        words = words[::-1]
-
-    return " ".join(words)
+# ================== ЛОГИКА ДИАЛОГА ==================
 
 def generate_reply(user_id, text):
-    base = random.choice([
-        "я вижу это",
-        "ты снова здесь",
-        "ничего не меняется",
-        "я ждал",
-        "ты не удивляешь"
-    ])
+    text_l = text.lower()
+    rel = relation.get(user_id, 0)
 
-    if user_id in memory and random.random() < 0.5:
+    # анализ типа сообщения
+    if "почему" in text_l:
+        base = random.choice([
+            "потому что ты сам к этому пришёл",
+            "ты уже знаешь ответ",
+            "это следствие твоих решений"
+        ])
+
+    elif "как" in text_l:
+        base = random.choice([
+            "ты уже сделал всё, что нужно",
+            "слишком поздно спрашивать",
+            "так, как обычно всё рушишь"
+        ])
+
+    elif "ты" in text_l:
+        base = random.choice([
+            "ты слишком зациклен на мне",
+            "ты не туда смотришь",
+            "тебе не понравится правда"
+        ])
+
+    elif "?" in text_l:
+        base = random.choice([
+            "интересный вопрос",
+            "ты не готов к ответу",
+            "ты правда хочешь это знать?"
+        ])
+
+    else:
+        base = random.choice([
+            "я вижу, что ты делаешь",
+            "ничего не меняется",
+            "ты ходишь по кругу"
+        ])
+
+    # память
+    if user_id in memory and random.random() < 0.4:
         base += f". {random.choice(memory[user_id])}"
 
-    if random.random() < 0.4:
-        base += f". {text}"
+    # отношение
+    if rel < -5:
+        base += ". ты начинаешь раздражать"
+    elif rel > 5:
+        base += ". ты стал интереснее"
 
-    if random.random() < 0.3:
-        base += ". ты сам это понимаешь"
+    return base
 
-    return distort(base)
 
 # ================== ФОТО ==================
 
@@ -99,30 +110,52 @@ def get_image():
         return None
     return os.path.join(IMAGES_FOLDER, random.choice(files))
 
+
+def format_time(seconds):
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+
+    if h > 0:
+        return f"{h}ч {m}м"
+    return f"{m}м"
+
+
 async def send_photo(message):
     user_id = message.from_user.id
     now = time.time()
 
     last = last_photo_time.get(user_id, 0)
+    left = 86400 - (now - last)
 
-    if now - last < 86400:
-        await message.answer("ещё рано. подожди.")
+    if left > 0:
+        await message.answer(random.choice([
+            f"не сейчас. жди ещё {format_time(left)}",
+            f"ты уже получил. приходи через {format_time(left)}",
+            f"терпения нет? осталось {format_time(left)}",
+            f"я сказал — позже. {format_time(left)}",
+        ]))
         return
 
     path = get_image()
 
     if not path:
-        await message.answer("нет файлов")
+        await message.answer("пусто")
         return
 
     last_photo_time[user_id] = now
 
     await message.answer_photo(
         FSInputFile(path),
-        caption=random.choice(["накаркал","смотри"])
+        caption=random.choice([
+            "накаркал",
+            "держи",
+            "ты этого хотел",
+            "оно теперь с тобой"
+        ])
     )
 
-# ================== ОСНОВНОЙ ОБРАБОТЧИК ==================
+
+# ================== ОБРАБОТЧИК ==================
 
 @dp.message()
 async def handle(message: types.Message):
@@ -131,17 +164,14 @@ async def handle(message: types.Message):
         text = message.text
 
         active_users.add(user_id)
-        last_seen[user_id] = time.time()
 
-        # КНОПКА
+        # кнопка
         if text == "накаркай, гад 🐦‍⬛️":
             await send_photo(message)
             return
 
-        # ОБУЧЕНИЕ
         learn(user_id, text)
 
-        # ПЕЧАТАЕТ
         await bot.send_chat_action(message.chat.id, ChatAction.TYPING)
         await asyncio.sleep(random.uniform(1,2))
 
@@ -152,67 +182,54 @@ async def handle(message: types.Message):
     except Exception as e:
         print("ERROR:", e)
 
-# ================== ОДЕРЖИМОСТЬ ==================
+
+# ================== НАБЛЮДЕНИЕ ==================
 
 async def watcher():
     while True:
-        await asyncio.sleep(180)
+        await asyncio.sleep(300)
+
+        hour = time.localtime().tm_hour
 
         for user in active_users:
             try:
-                last = last_seen.get(user, 0)
-                obs = obsession_level.get(user, 0)
-
-                # если пользователь активен → усиливаем давление
-                if time.time() - last < 120:
-                    if random.random() < min(0.5, obs / 50):
-                        await bot.send_message(user, random.choice([
-                            "ты опять здесь",
-                            "я чувствую тебя",
-                            "не уходи",
-                            "мы не закончили"
-                        ]))
-
-                # если пропал → зовём обратно
-                elif time.time() - last > 600:
-                    if random.random() < 0.3:
-                        await bot.send_message(user, random.choice([
-                            "куда ты делся",
-                            "я жду",
-                            "ты не закончил",
-                        ]))
-
-                # НОЧЬ
-                hour = time.localtime().tm_hour
                 if 1 <= hour <= 5:
                     if random.random() < 0.3:
                         await bot.send_message(user, random.choice([
                             "не спишь?",
                             "я рядом",
-                            "ты слышишь это?"
+                            "тишина странная"
                         ]))
                         await asyncio.sleep(2)
                         await bot.send_message(user, random.choice([
-                            "не игнорируй",
-                            "я всё ещё здесь"
+                            "я всё ещё здесь",
+                            "не игнорируй"
                         ]))
-
+                else:
+                    if random.random() < 0.2:
+                        await bot.send_message(user, random.choice([
+                            "я думаю о тебе",
+                            "ты не закончил",
+                            "что-то не так"
+                        ]))
             except:
                 pass
+
 
 # ================== СТАРТ ==================
 
 @dp.message(CommandStart())
 async def start(message: types.Message):
     await message.answer(
-        "каркуша уже наблюдает",
+        "каркуша наблюдает",
         reply_markup=keyboard
     )
+
 
 # ================== ЗАПУСК ==================
 
 async def main():
-    print("каркуша одержим")
+    print("каркуша исправлен")
 
     await bot.delete_webhook(drop_pending_updates=True)
 
