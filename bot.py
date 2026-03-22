@@ -1,8 +1,6 @@
 import asyncio
 import os
 import random
-import signal
-import sys
 import time
 from datetime import datetime
 
@@ -10,11 +8,16 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, FSInputFile
 from aiogram.enums import ChatAction
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiohttp import web
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
+WEBHOOK_HOST = os.getenv("WEBHOOK_HOST")  # https://your-app.up.railway.app
+WEBHOOK_PATH = "/webhook"
+WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
-if not TOKEN:
-    raise ValueError("Нет TELEGRAM_TOKEN")
+if not TOKEN or not WEBHOOK_HOST:
+    raise ValueError("Нет TELEGRAM_TOKEN или WEBHOOK_HOST")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -29,22 +32,12 @@ last_activity = {}
 night_sent = {}
 day_sent = {}
 
-shutdown_event = asyncio.Event()
-
 keyboard = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="накаркай, гад 🐦‍⬛️")]],
     resize_keyboard=True
 )
 
-# 💀 МЯГКОЕ ЗАВЕРШЕНИЕ
-def shutdown_handler():
-    print("💀 Получен сигнал остановки")
-    shutdown_event.set()
-
-signal.signal(signal.SIGTERM, lambda *_: shutdown_handler())
-signal.signal(signal.SIGINT, lambda *_: shutdown_handler())
-
-# 🧠 простой интеллект
+# 🧠 интеллект
 def generate_reply(user_id, text):
     text = text.lower()
 
@@ -58,15 +51,15 @@ def generate_reply(user_id, text):
     if "почему" in text:
         return random.choice([
             "потому что ты так решил",
-            "слишком поздно спрашивать",
-            "ты уже сделал выбор"
+            "ты уже выбрал",
+            "поздно думать"
         ])
 
     if any(x in text for x in ["идиот", "нахуй", "дебил"]):
         return random.choice([
             "слабовато",
             "это всё?",
-            "ожидал лучше"
+            "жалко"
         ])
 
     if user_id in memory and random.random() < 0.3:
@@ -143,7 +136,7 @@ async def chat(message: types.Message):
 
 # 👁 поведение
 async def watcher():
-    while not shutdown_event.is_set():
+    while True:
         await asyncio.sleep(60)
 
         now = time.time()
@@ -174,32 +167,26 @@ async def watcher():
             else:
                 day_sent[user_id] = False
 
-# ▶️ запуск
-async def main():
-    print("бот запускается...")
+# 🌐 запуск webhook
+async def on_startup(app):
+    await bot.set_webhook(WEBHOOK_URL)
+    asyncio.create_task(watcher())
+    print("Webhook установлен:", WEBHOOK_URL)
 
-    try:
-        await bot.delete_webhook(drop_pending_updates=True)
-    except:
-        pass
-
-    await asyncio.sleep(3)
-
-    watcher_task = asyncio.create_task(watcher())
-
-    polling_task = asyncio.create_task(dp.start_polling(bot))
-
-    # 💀 ЖДЁМ СИГНАЛА ОСТАНОВКИ
-    await shutdown_event.wait()
-
-    print("💀 останавливаемся...")
-
-    polling_task.cancel()
-    watcher_task.cancel()
-
+async def on_shutdown(app):
+    await bot.delete_webhook()
     await bot.session.close()
 
-    print("бот остановлен")
+def main():
+    app = web.Application()
+
+    dp.startup.register(on_startup)
+    dp.shutdown.register(on_shutdown)
+
+    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
+    setup_application(app, dp, bot=bot)
+
+    web.run_app(app, host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
