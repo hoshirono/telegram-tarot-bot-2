@@ -1,3 +1,4 @@
+last_reminded = {}
 import asyncio
 import random
 import time
@@ -223,31 +224,61 @@ async def handle(message: types.Message):
 
 async def watcher():
     while True:
-        await asyncio.sleep(300)
+        await asyncio.sleep(120)  # проверка раз в 2 минуты
 
+        now = time.time()
         hour = time.localtime().tm_hour
 
-        for user in active_users:
+        for user in list(active_users):
             try:
+                last_photo = last_photo_time.get(user, 0)
+                last_note = last_reminded.get(user, 0)
+
+                # ================= НАПОМИНАНИЕ 24 ЧАСА =================
+                if last_photo != 0:
+                    if now - last_photo >= 86400 and now - last_note >= 86400:
+
+                        await bot.send_message(user, random.choice([
+                            "время пришло. не делай вид, что не ждал",
+                            "можешь снова попробовать. вдруг на этот раз хуже",
+                            "я знаю, ты проверял",
+                            "твоя попытка номер два",
+                            "нажми кнопку. давай",
+                            "судьба снова открыта для тебя",
+                            "ты ведь ради этого возвращаешься"
+                        ]))
+
+                        last_reminded[user] = now
+                        continue  # чтобы не спамил дальше в этом цикле
+
+
+                # ================= НОЧНАЯ КРИПОТА =================
                 if 1 <= hour <= 5:
-                    if random.random() < 0.3:
+                    if random.random() < 0.15:
                         await bot.send_message(user, random.choice([
                             "не спишь?",
-                            "я рядом",
-                            "тишина странная"
+                            "я здесь",
+                            "ты снова онлайн",
+                            "я вижу это",
                         ]))
+
                         await asyncio.sleep(2)
+
                         await bot.send_message(user, random.choice([
-                            "я всё ещё здесь",
-                            "не игнорируй"
+                            "не игнорируй",
+                            "я жду",
+                            "ты ведь не просто так зашел",
                         ]))
+
+                # ================= ДНЕВНОЙ ПИНГ =================
                 else:
-                    if random.random() < 0.2:
+                    if random.random() < 0.08:
                         await bot.send_message(user, random.choice([
-                            "я думаю о тебе",
                             "ты не закончил",
-                            "что-то не так"
+                            "я помню",
+                            "что-то не так",
                         ]))
+
             except:
                 pass
 
