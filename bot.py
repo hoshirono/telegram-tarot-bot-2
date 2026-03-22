@@ -1,307 +1,227 @@
-last_reminded = {}
 import asyncio
 import random
 import time
 import os
-import re
-
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, FSInputFile
 from aiogram.enums import ChatAction
 
+# ====== ТОКЕН ======
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-
 if not TOKEN:
     raise ValueError("Нет TELEGRAM_TOKEN")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-IMAGES_FOLDER = "images"
-
-memory = {}
-relation = {}
+# ====== ДАННЫЕ ======
 active_users = set()
+memory = {}
+
 last_photo_time = {}
-last_messages = {}
+last_reminded = {}
+
+night_sent = {}
+day_sent = {}
+
+IMAGE_FOLDER = "images"
 
 keyboard = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="накаркай, гад 🐦‍⬛️")]],
     resize_keyboard=True
 )
 
-# ================== ОБУЧЕНИЕ ==================
+# ====== КАРТИНКА ======
+def get_random_image():
+    files = os.listdir(IMAGE_FOLDER)
+    if not files:
+        return None
+    return os.path.join(IMAGE_FOLDER, random.choice(files))
 
-def learn(user_id, text):
-    memory.setdefault(user_id, []).append(text)
-    if len(memory[user_id]) > 10:
-        memory[user_id].pop(0)
-
-    rel = relation.get(user_id, 0)
-
-    if any(w in text.lower() for w in ["спасибо", "норм"]):
-        rel += 1
-    if any(w in text.lower() for w in ["иди", "тупой", "бред"]):
-        rel -= 2
-
-    relation[user_id] = max(-10, min(10, rel))
-
-
-# ================== ЛОГИКА ДИАЛОГА ==================
-
+# ====== ДИАЛОГ ======
 def generate_reply(user_id, text):
-    text_l = text.lower()
+    t = text.lower()
 
-    # ================= ОСКОРБЛЕНИЯ =================
-    insults = ["нахуй", "иди", "тупой", "дебил", "бред", "заткнись"]
-
-    if any(w in text_l for w in insults):
+    insults = ["нахуй", "иди", "тупой", "дебил"]
+    if any(w in t for w in insults):
         return random.choice([
-            "слабовато. ты можешь лучше",
-            "оскорбления — это максимум, на что ты способен?",
-            "я ожидал чего-то интереснее",
-            "ты даже злишься скучно",
-            "продолжай. мне любопытно, насколько ты опустишься",
-            "ты сейчас разговариваешь со мной или с собой?",
-            "знаешь, что хуже? ты в это веришь",
-            "даже агрессия у тебя без характера",
-            "ещё. давай. ты почти сказал что-то осмысленное",
+            "слабовато",
+            "ещё",
+            "ты злишься скучно",
+            "и это всё?"
         ])
 
-    # ================= КАК ТЫ =================
-    if any(q in text_l for q in ["как ты", "как дела", "как настроение"]):
+    if "как" in t and "ты" in t:
         return random.choice([
-            "я существую. этого достаточно",
-            "лучше, чем ты думаешь",
-            "стабильно. ты вот нет",
-            "я не меняюсь. в отличие от тебя",
-            "нормально. наблюдаю",
-            "мне не нужно настроение",
-            "спокойно. слишком спокойно",
+            "я существую",
+            "лучше чем ты",
+            "нормально. наблюдаю"
         ])
 
-    # ================= И ЧТО =================
-    if text_l.strip() in ["и что", "что", "ну и", "и?"]:
+    if t in ["да", "нет"]:
         return random.choice([
-            "и всё. ты уже тратишь время",
-            "и ничего. ты просто продолжаешь",
-            "и ты всё ещё здесь",
-            "и ты ожидал чего-то большего?",
-            "и это был момент, где ты мог остановиться",
-            "и ты сам не понял, зачем спросил",
-            "и вот ты снова в этом месте",
-        ])
-
-    # ================= ПОЧЕМУ =================
-    if "почему" in text_l:
-        return random.choice([
-            "потому что ты довёл до этого",
-            "ты уже знаешь ответ",
-            "это следствие, а не причина",
-            "всё началось раньше, чем ты думаешь",
-        ])
-
-    # ================= КАК =================
-    if "как" in text_l:
-        return random.choice([
-            "так же, как всегда — через ошибку",
-            "слишком поздно спрашивать",
-            "не так, как ты надеешься",
-            "ты уже выбрал путь",
-        ])
-
-    # ================= КОРОТКИЕ ОТВЕТЫ =================
-    if text_l in ["да", "нет", "ок", "понял"]:
-        return random.choice([
-            "вот и всё?",
             "ожидаемо",
-            "и это весь твой ответ?",
-            "ты мог бы сказать больше",
+            "и всё?",
         ])
 
-    # ================= ОБЩИЙ ДИАЛОГ =================
     base = random.choice([
         "ты снова здесь",
         "ничего не меняется",
-        "я наблюдаю",
-        "ты продолжаешь",
-        "это становится привычкой",
-        "интересно, когда ты поймёшь",
+        "я вижу",
+        "продолжай"
     ])
 
-    # добавляем память
-    if user_id in memory and random.random() < 0.4:
-        base += f". {random.choice(memory[user_id])}"
+    if user_id in memory and memory[user_id]:
+        if random.random() < 0.3:
+            base += f". {random.choice(memory[user_id])}"
 
     return base
 
-    return base
-
-
-# ================== ФОТО ==================
-
-def get_image():
-    files = [f for f in os.listdir(IMAGES_FOLDER) if f.endswith((".jpg",".png",".jpeg"))]
-    if not files:
-        return None
-    return os.path.join(IMAGES_FOLDER, random.choice(files))
-
-
-def format_time(seconds):
-    h = int(seconds // 3600)
-    m = int((seconds % 3600) // 60)
-
-    if h > 0:
-        return f"{h}ч {m}м"
-    return f"{m}м"
-
-
+# ====== ОТПРАВКА ФОТО ======
 async def send_photo(message):
-    user_id = message.from_user.id
+    user = message.from_user.id
     now = time.time()
 
-    last = last_photo_time.get(user_id, 0)
-    left = 86400 - (now - last)
+    last = last_photo_time.get(user, 0)
 
-    if left > 0:
+    if now - last < 86400:
+        remain = int((86400 - (now - last)) // 3600)
         await message.answer(random.choice([
-            f"не сейчас. жди ещё {format_time(left)}",
-            f"ты уже получил. приходи через {format_time(left)}",
-            f"терпения нет? осталось {format_time(left)}",
-            f"я сказал — позже. {format_time(left)}",
-        ]))
+            f"я сказал — позже. {remain}ч",
+            f"ещё рано. подожди {remain}ч",
+            f"ты не понял с первого раза? {remain}ч"
+        ]), reply_markup=keyboard)
         return
 
-    path = get_image()
-
+    path = get_random_image()
     if not path:
-        await message.answer("пусто")
+        await message.answer("картинок нет", reply_markup=keyboard)
         return
 
-    last_photo_time[user_id] = now
+    await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_PHOTO)
+    await asyncio.sleep(1)
 
+    photo = FSInputFile(path)
     await message.answer_photo(
-        FSInputFile(path),
+        photo,
         caption=random.choice([
             "накаркал",
-            "держи",
-            "ты этого хотел",
-            "оно теперь с тобой"
-        ])
+            "сам виноват",
+            "получай",
+            "смотри"
+        ]),
+        reply_markup=keyboard
     )
 
+    last_photo_time[user] = now
 
-# ================== ОБРАБОТЧИК ==================
+# ====== СТАРТ ======
+@dp.message(CommandStart())
+async def start(message: types.Message):
+    active_users.add(message.from_user.id)
 
+    await message.answer(
+        "каркуша здесь",
+        reply_markup=keyboard
+    )
+
+# ====== КНОПКА ======
+@dp.message(lambda m: m.text == "накаркай, гад 🐦‍⬛️")
+async def handle_button(message: types.Message):
+    active_users.add(message.from_user.id)
+    await send_photo(message)
+
+# ====== ДИАЛОГ ======
 @dp.message()
 async def handle(message: types.Message):
-    try:
-        user_id = message.from_user.id
-        text = message.text
+    user = message.from_user.id
+    active_users.add(user)
 
-        active_users.add(user_id)
+    if message.text == "накаркай, гад 🐦‍⬛️":
+        return
 
-        # кнопка
-        if text == "накаркай, гад 🐦‍⬛️":
-            await send_photo(message)
-            return
+    memory.setdefault(user, []).append(message.text)
+    if len(memory[user]) > 20:
+        memory[user].pop(0)
 
-        learn(user_id, text)
+    await bot.send_chat_action(message.chat.id, ChatAction.TYPING)
+    await asyncio.sleep(random.uniform(0.5, 1.5))
 
-        await bot.send_chat_action(message.chat.id, ChatAction.TYPING)
-        await asyncio.sleep(random.uniform(1,2))
+    reply = generate_reply(user, message.text)
 
-        reply = generate_reply(user_id, text)
+    await message.answer(reply, reply_markup=keyboard)
 
-        await message.answer(reply)
-
-    except Exception as e:
-        print("ERROR:", e)
-
-
-# ================== НАБЛЮДЕНИЕ ==================
-
+# ====== WATCHER ======
 async def watcher():
     while True:
-        await asyncio.sleep(120)  # проверка раз в 2 минуты
+        await asyncio.sleep(60)
 
         now = time.time()
         hour = time.localtime().tm_hour
 
         for user in list(active_users):
             try:
-                last_photo = last_photo_time.get(user, 0)
-                last_note = last_reminded.get(user, 0)
-
-                # ================= НАПОМИНАНИЕ 24 ЧАСА =================
-                if last_photo != 0:
-                    if now - last_photo >= 86400 and now - last_note >= 86400:
-
-                        await bot.send_message(user, random.choice([
-                            "время пришло. не делай вид, что не ждал",
-                            "можешь снова попробовать. вдруг на этот раз хуже",
-                            "я знаю, ты проверял",
-                            "твоя попытка номер два",
-                            "нажми кнопку. давай",
-                            "судьба снова открыта для тебя",
-                            "ты ведь ради этого возвращаешься"
-                        ]))
-
-                        last_reminded[user] = now
-                        continue  # чтобы не спамил дальше в этом цикле
-
-
-                # ================= НОЧНАЯ КРИПОТА =================
+                # ===== НОЧЬ (1 раз, 2 сообщения) =====
                 if 1 <= hour <= 5:
-                    if random.random() < 0.15:
+                    if not night_sent.get(user, False):
                         await bot.send_message(user, random.choice([
                             "не спишь?",
                             "я здесь",
-                            "ты снова онлайн",
-                            "я вижу это",
+                            "я вижу тебя"
                         ]))
 
                         await asyncio.sleep(2)
 
                         await bot.send_message(user, random.choice([
                             "не игнорируй",
-                            "я жду",
-                            "ты ведь не просто так зашел",
+                            "ответь",
+                            "ты ведь зашел не просто так"
                         ]))
 
-                # ================= ДНЕВНОЙ ПИНГ =================
+                        night_sent[user] = True
+
+                # сброс после ночи
                 else:
-                    if random.random() < 0.08:
+                    night_sent[user] = False
+
+                # ===== ДЕНЬ (1 раз) =====
+                if 10 <= hour <= 22:
+                    if not day_sent.get(user, False):
+                        if random.random() < 0.05:
+                            await bot.send_message(user, random.choice([
+                                "ты снова здесь",
+                                "я помню",
+                                "не расслабляйся"
+                            ]))
+                            day_sent[user] = True
+
+                else:
+                    day_sent[user] = False
+
+                # ===== НАПОМИНАНИЕ 24ч =====
+                last_photo = last_photo_time.get(user, 0)
+                last_note = last_reminded.get(user, 0)
+
+                if last_photo != 0:
+                    if now - last_photo >= 86400 and now - last_note >= 86400:
                         await bot.send_message(user, random.choice([
-                            "ты не закончил",
-                            "я помню",
-                            "что-то не так",
+                            "время пришло",
+                            "можешь снова попробовать",
+                            "я ждал"
                         ]))
+                        last_reminded[user] = now
 
             except:
                 pass
 
-
-# ================== СТАРТ ==================
-
-@dp.message(CommandStart())
-async def start(message: types.Message):
-    await message.answer(
-        "каркуша наблюдает",
-        reply_markup=keyboard
-    )
-
-
-# ================== ЗАПУСК ==================
-
+# ====== ЗАПУСК ======
 async def main():
-    print("каркуша исправлен")
+    print("бот запущен")
 
     await bot.delete_webhook(drop_pending_updates=True)
 
     asyncio.create_task(watcher())
-
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
