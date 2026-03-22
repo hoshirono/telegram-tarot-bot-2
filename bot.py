@@ -18,12 +18,18 @@ LOCK_FILE = "bot.lock"
 # 💀 защита от второго запуска
 def acquire_lock():
     if os.path.exists(LOCK_FILE):
-        print("❌ Бот уже запущен (найден lock-файл)")
-        sys.exit()
+        with open(LOCK_FILE) as f:
+            old_pid = int(f.read())
+
+        try:
+            os.kill(old_pid, 0)
+            print("❌ Уже запущен процесс:", old_pid)
+            sys.exit()
+        except:
+            print("старый процесс мёртв, перезапуск")
 
     with open(LOCK_FILE, "w") as f:
         f.write(str(os.getpid()))
-
 
 # 💀 освобождение при остановке
 def release_lock():
