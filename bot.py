@@ -21,7 +21,7 @@ if not TOKEN or not WEBHOOK_HOST:
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
-П
+
 IMAGE_FOLDER = "images"
 
 memory = {}
