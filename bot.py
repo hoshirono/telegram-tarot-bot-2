@@ -2,163 +2,178 @@ import asyncio
 import random
 import time
 import os
+import re
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, FSInputFile
 from aiogram.enums import ChatAction
 
-# ================== НАСТРОЙКИ ==================
-
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 if not TOKEN:
     raise ValueError("Нет TELEGRAM_TOKEN")
 
-IMAGES_FOLDER = "images"
-
-# ================== ИНИЦИАЛИЗАЦИЯ ==================
-
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-memory = {}
-active_users = set()
-last_message_time = {}
+IMAGES_FOLDER = "images"
 
-# ================== КНОПКА ==================
+memory = {}
+patterns = {}
+user_style = {}
+relation = {}  # отношение к пользователю
+active_users = set()
+last_photo_time = {}
+last_day_message = {}
+last_night_message = {}
 
 keyboard = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="накаркай, гад 🐦‍⬛️")]],
     resize_keyboard=True
 )
 
-# ================== СЛОВАРИ ==================
+# ================== ОБУЧЕНИЕ ==================
 
-dark_phrases = [
-    "я вижу тебя даже когда ты не пишешь",
-    "сегодня ты опять выберешь не то",
-    "тишина вокруг тебя странная",
-    "ты ведь чувствуешь это, да?",
-    "не все мысли твои",
-]
+def learn(user_id, text):
+    words = re.findall(r'\w+', text.lower())
 
-night_phrases = [
-    "ночью ты думаешь слишком громко",
-    "я слышу твои мысли",
-    "ты зря не спишь",
-    "в темноте ты честнее",
-    "я рядом",
-]
+    memory.setdefault(user_id, []).append(text)
+    if len(memory[user_id]) > 30:
+        memory[user_id].pop(0)
 
-taunts = [
-    "без меня не вывозишь, да?",
-    "опять пишешь мне",
-    "не начинай даже",
-    "я уже знаю что ты скажешь",
-    "давай быстрее"
-]
+    user_style.setdefault(user_id, []).extend(words)
+    if len(user_style[user_id]) > 200:
+        user_style[user_id] = user_style[user_id][-200:]
 
-photo_captions = [
-    "накаркал",
-    "сам гад",
-    "можно было и повежливее",
-    "ну держи",
-    "смотри внимательнее"
-]
+    for w in words:
+        patterns.setdefault(w, []).append(text)
+        if len(patterns[w]) > 20:
+            patterns[w].pop(0)
 
-# ================== ВСПОМОГАТЕЛЬНЫЕ ==================
+    # отношение
+    rel = relation.get(user_id, 0)
+
+    if any(w in text.lower() for w in ["спасибо", "норм", "понял"]):
+        rel += 1
+    if any(w in text.lower() for w in ["иди", "заткнись", "бред"]):
+        rel -= 2
+
+    relation[user_id] = max(-10, min(10, rel))
+
+# ================== ЛОГИКА ==================
+
+def analyze(text):
+    text = text.lower()
+
+    if "почему" in text:
+        return "why"
+    if "как" in text:
+        return "how"
+    if "что" in text:
+        return "what"
+    if "ты" in text:
+        return "attack"
+    if "не" in text:
+        return "neg"
+    return "neutral"
 
 def distort(text):
     words = text.split()
 
-    if not words:
-        return text
+    if random.random() < 0.3 and words:
+        i = random.randint(0, len(words)-1)
+        words[i] += words[i][-1]
 
-    if random.random() < 0.4:
-        w = random.choice(words)
-        words[words.index(w)] = w + w[-1]
-
-    if random.random() < 0.3:
+    if random.random() < 0.2:
         words = words[::-1]
 
     return " ".join(words)
 
-def generate_reply(user_id, user_text):
-    base = random.choice([
-        "ты сам это начал",
-        "не притворяйся",
-        "это звучит хуже чем ты думаешь",
-        "я бы на твоем месте молчал",
-        "ты опять об этом",
-    ])
+def generate_reply(user_id, text):
+    mode = analyze(text)
+    rel = relation.get(user_id, 0)
 
-    # иногда вставляет старые сообщения
-    if user_id in memory and memory[user_id] and random.random() < 0.4:
-        old = random.choice(memory[user_id])
-        base += f". {distort(old)}"
+    # базовый смысл
+    base_map = {
+        "why": "потому что ты сам это запустил",
+        "how": "ты уже сделал всё необходимое",
+        "what": "ты правда хочешь это знать?",
+        "attack": "ты слишком уверен в себе",
+        "neg": "отрицание ничего не меняет",
+        "neutral": "я наблюдаю"
+    }
 
-    # искажает текущий текст
-    if random.random() < 0.5:
-        base += f". {distort(user_text)}"
+    base = base_map.get(mode, "я вижу больше чем ты думаешь")
 
-    return base
+    # настройка отношения
+    if rel < -5:
+        base += ". ты начинаешь раздражать"
+    elif rel > 5:
+        base += ". ты стал интереснее"
 
-def get_random_image():
-    files = [f for f in os.listdir(IMAGES_FOLDER) if f.endswith((".jpg", ".png", ".jpeg"))]
+    # вставка памяти
+    if user_id in memory and random.random() < 0.5:
+        base += f". {distort(random.choice(memory[user_id]))}"
 
-    if not files:
-        return None
+    # стиль пользователя
+    words = user_style.get(user_id, [])
+    if words and random.random() < 0.4:
+        base += f". {random.choice(words)}..."
 
-    return os.path.join(IMAGES_FOLDER, random.choice(files))
+    # паттерны
+    for w in text.split():
+        if w in patterns and random.random() < 0.3:
+            base += f". {random.choice(patterns[w])}"
+            break
 
-async def safe_send(chat_id, text):
-    try:
-        await bot.send_message(chat_id, text)
-    except:
-        pass
+    # газлайтинг
+    if random.random() < 0.3:
+        base += ". ты сам уже знаешь ответ"
+
+    return distort(base)
 
 # ================== ФОТО ==================
 
-async def send_photo(message: types.Message):
+def get_random_image():
+    files = [f for f in os.listdir(IMAGES_FOLDER) if f.endswith((".jpg", ".png", ".jpeg"))]
+    if not files:
+        return None
+    return os.path.join(IMAGES_FOLDER, random.choice(files))
+
+async def send_photo(message):
+    user_id = message.from_user.id
+    now = time.time()
+
+    last = last_photo_time.get(user_id, 0)
+
+    if now - last < 86400:
+        await message.answer(random.choice([
+            "не так быстро",
+            "ждать не умеешь?",
+            "я тебе не автомат",
+            "сутки не прошли",
+            "ты уже получил своё"
+        ]))
+        return
+
     path = get_random_image()
 
     if not path:
-        await message.answer("нет картинок")
+        await message.answer("пусто. даже у меня.")
         return
 
-    photo = FSInputFile(path)
+    last_photo_time[user_id] = now
 
     await message.answer_photo(
-        photo=photo,
-        caption=random.choice(photo_captions)
+        FSInputFile(path),
+        caption=random.choice([
+            "накаркал",
+            "смотри",
+            "оно теперь с тобой",
+            "ты это выбрал"
+        ])
     )
-
-# ================== СТАРТ ==================
-
-@dp.message(CommandStart())
-async def start(message: types.Message):
-    active_users.add(message.from_user.id)
-
-    await message.answer(
-        "каркуша здесь\n\nжми кнопку",
-        reply_markup=keyboard
-    )
-
-# ================== КНОПКА ==================
-
-@dp.message(lambda m: m.text == "накаркай, гад 🐦‍⬛️")
-async def photo_handler(message: types.Message):
-    active_users.add(message.from_user.id)
-    await send_photo(message)
-
-# ================== ПСЕВДО "ТЫ ПЕЧАТАЕШЬ" ==================
-
-async def fake_typing(user_id):
-    await asyncio.sleep(random.uniform(2, 5))
-
-    if random.random() < 0.3:
-        await safe_send(user_id, random.choice(taunts))
 
 # ================== ЧАТ ==================
 
@@ -171,13 +186,7 @@ async def chat(message: types.Message):
 
     active_users.add(user_id)
 
-    # сохраняем
-    memory.setdefault(user_id, []).append(message.text)
-    if len(memory[user_id]) > 20:
-        memory[user_id].pop(0)
-
-    # имитация "видит что печатаешь"
-    asyncio.create_task(fake_typing(user_id))
+    learn(user_id, message.text)
 
     await bot.send_chat_action(message.chat.id, ChatAction.TYPING)
     await asyncio.sleep(random.uniform(1, 2))
@@ -186,45 +195,70 @@ async def chat(message: types.Message):
 
     await message.answer(reply)
 
-# ================== НОЧНАЯ КРИПОТА ==================
+# ================== СТАРТ ==================
 
-async def night_watcher():
+@dp.message(CommandStart())
+async def start(message: types.Message):
+    active_users.add(message.from_user.id)
+
+    await message.answer(
+        "каркуша наблюдает\n\nжми кнопку если хочешь",
+        reply_markup=keyboard
+    )
+
+# ================== КНОПКА ==================
+
+@dp.message(lambda m: m.text == "накаркай, гад 🐦‍⬛️")
+async def button(message: types.Message):
+    await send_photo(message)
+
+# ================== НАБЛЮДЕНИЕ ==================
+
+async def watcher():
     while True:
         await asyncio.sleep(300)
 
         hour = time.localtime().tm_hour
 
-        if 1 <= hour <= 5:
-            for user in active_users:
-                if random.random() < 0.3:
-                    await safe_send(user, random.choice(night_phrases))
-
-# ================== ОБЫЧНЫЕ СООБЩЕНИЯ ==================
-
-async def watcher():
-    while True:
-        await asyncio.sleep(120)
-
         for user in active_users:
-            now = time.time()
-            last = last_message_time.get(user, 0)
+            try:
+                if 1 <= hour <= 5:
+                    # ночью — 2 сообщения
+                    if random.random() < 0.3:
+                        await bot.send_message(user, random.choice([
+                            "ты не один",
+                            "я рядом",
+                            "не оборачивайся"
+                        ]))
+                        await asyncio.sleep(2)
+                        await bot.send_message(user, random.choice([
+                            "я всё ещё здесь",
+                            "ты это чувствуешь",
+                            "тишина странная"
+                        ]))
+                else:
+                    # днем — редко 1 сообщение
+                    last = last_day_message.get(user, 0)
+                    if time.time() - last > 21600:  # 6 часов
+                        if random.random() < 0.3:
+                            await bot.send_message(user, random.choice([
+                                "я думаю о тебе",
+                                "что-то изменилось",
+                                "я заметил"
+                            ]))
+                            last_day_message[user] = time.time()
 
-            if now - last < 10800:
-                continue
-
-            if random.random() < 0.4:
-                await safe_send(user, random.choice(dark_phrases))
-                last_message_time[user] = now
+            except:
+                pass
 
 # ================== ЗАПУСК ==================
 
 async def main():
-    print("каркуша запущен")
+    print("каркуша жив")
 
     await bot.delete_webhook(drop_pending_updates=True)
 
     asyncio.create_task(watcher())
-    asyncio.create_task(night_watcher())
 
     await dp.start_polling(bot)
 
