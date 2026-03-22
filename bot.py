@@ -13,8 +13,8 @@ from aiogram.enums import ChatAction
 # ========================
 # 🔑 ENV
 # ========================
-TOKEN = os.getenv("8705289370:AAF14RnDpQIi7SxChdQIpGshbD2iB_G9La0")
-AI_KEY = os.getenv("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")
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+AI_KEY = os.getenv("OPENROUTER_API_KEY")
 
 if not TOKEN:
     raise ValueError("Нет TELEGRAM_TOKEN")
