@@ -84,7 +84,7 @@ async def ai_reply(user_id, text):
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "mistralai/mistral-7b-instruct:free",
+                    "model": "openchat/openchat-7b:free",
                     "messages": messages,
                     "temperature": 0.7
                 },
