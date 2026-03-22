@@ -10,7 +10,7 @@ from aiogram.enums import ChatAction
 # ====== ТОКЕН ======
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 if not TOKEN:
-    raise ValueError("Нет TELEGRAM_TOKEN")
+    print("⚠️ TELEGRAM_TOKEN не найден")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
