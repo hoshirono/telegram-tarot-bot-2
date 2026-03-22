@@ -2,13 +2,14 @@ import asyncio
 import random
 import time
 import os
+import aiohttp
+
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, FSInputFile
 from aiogram.enums import ChatAction
-import aiohttp
 
-# ================== НАСТРОЙКИ ==================
+# ================= НАСТРОЙКИ =================
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
@@ -21,21 +22,21 @@ dp = Dispatcher()
 
 IMAGE_FOLDER = "images"
 
-# ================== ПАМЯТЬ ==================
+# ================= ПАМЯТЬ =================
 
 memory = {}
 active_users = set()
 last_message_time = {}
 last_ai_message = {}
 
-# ================== КНОПКА ==================
+# ================= КНОПКА =================
 
 keyboard = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="накаркай, гад 🐦‍⬛️")]],
     resize_keyboard=True
 )
 
-# ================== ФОТО ==================
+# ================= ФОТО =================
 
 def get_random_image():
     try:
@@ -46,15 +47,11 @@ def get_random_image():
     except:
         return None
 
-# ================== ИИ ==================
+# ================= ИИ (ПОЧИНЕННЫЙ) =================
 
 async def ai_reply(user_id, text):
     if not OPENROUTER_API_KEY:
-        return random.choice([
-            "мне лень думать",
-            "сам догадайся",
-            "я сегодня молчу",
-        ])
+        return "каркуша молчит (нет ключа)"
 
     history = memory.get(user_id, [])[-6:]
 
@@ -63,13 +60,12 @@ async def ai_reply(user_id, text):
             "role": "system",
             "content": (
                 "Ты — Каркуша, тёмный маг.\n"
-                "Саркастичный, циничный, раздражительный.\n"
+                "Саркастичный, циничный, немного раздражённый.\n"
                 "Веди осмысленный диалог.\n"
                 "Не повторяй пользователя.\n"
                 "Не говори 'ты писал'.\n"
+                "Не неси бессвязный бред.\n"
                 "Иногда спорь.\n"
-                "Иногда отвечай коротко.\n"
-                "Не неси бред.\n"
             )
         }
     ]
@@ -88,22 +84,41 @@ async def ai_reply(user_id, text):
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "mistralai/mistral-7b-instruct",
+                    "model": "mistralai/mistral-7b-instruct:free",
                     "messages": messages,
                     "temperature": 0.7
-                }
+                },
+                timeout=20
             ) as r:
-                data = await r.json()
+
+                raw = await r.text()
+                print("AI RAW:", raw)
+
+                try:
+                    data = await r.json()
+                except:
+                    return "каркуша не понял ответ сервера"
 
                 if "choices" not in data:
-                    return "каркуша не в духе"
+                    return "каркуша сегодня не в духе"
 
-                return data["choices"][0]["message"]["content"]
+                content = data["choices"][0]["message"]["content"]
 
-    except:
-        return "я тебя не слышу"
+                if not content or len(content.strip()) == 0:
+                    return "..."
 
-# ================== АНТИ ДУБЛЬ ==================
+                return content.strip()
+
+    except Exception as e:
+        print("AI ERROR:", e)
+        return random.choice([
+            "я передумал отвечать",
+            "сам подумай",
+            "мне лень",
+            "не сейчас",
+        ])
+
+# ================= АНТИ-ДУБЛЬ =================
 
 async def safe_send(message, text):
     if last_ai_message.get(message.chat.id) == text:
@@ -111,7 +126,7 @@ async def safe_send(message, text):
     last_ai_message[message.chat.id] = text
     await message.answer(text)
 
-# ================== ОТПРАВКА ФОТО ==================
+# ================= ОТПРАВКА ФОТО =================
 
 async def send_photo(message):
     await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_PHOTO)
@@ -125,9 +140,9 @@ async def send_photo(message):
         "накаркал",
         "сам виноват",
         "держи",
-        "не ной теперь",
-        "живи с этим",
-        "могло быть хуже"
+        "живи теперь с этим",
+        "могло быть хуже",
+        "каркуша не старался"
     ])
 
     await message.answer_photo(
@@ -135,25 +150,25 @@ async def send_photo(message):
         caption=caption
     )
 
-# ================== СТАРТ ==================
+# ================= СТАРТ =================
 
 @dp.message(CommandStart())
 async def start(message: types.Message):
     active_users.add(message.from_user.id)
 
     await message.answer(
-        "каркуша смотрит на тебя.\n\nжми кнопку или говори.",
+        "каркуша здесь.\n\nжми кнопку или говори.",
         reply_markup=keyboard
     )
 
-# ================== КНОПКА ==================
+# ================= КНОПКА =================
 
 @dp.message(lambda m: m.text == "накаркай, гад 🐦‍⬛️")
 async def button_handler(message: types.Message):
     active_users.add(message.from_user.id)
     await send_photo(message)
 
-# ================== ЧАТ ==================
+# ================= ЧАТ =================
 
 @dp.message()
 async def chat(message: types.Message):
@@ -162,6 +177,8 @@ async def chat(message: types.Message):
     if message.text == "накаркай, гад 🐦‍⬛️":
         return
 
+    print("USER:", message.text)
+
     active_users.add(user_id)
 
     # память
@@ -169,7 +186,7 @@ async def chat(message: types.Message):
     if len(memory[user_id]) > 20:
         memory[user_id].pop(0)
 
-    # "он видит что ты пишешь"
+    # "наблюдает"
     if random.random() < 0.25:
         await message.answer(random.choice([
             "опять печатаешь...",
@@ -182,10 +199,18 @@ async def chat(message: types.Message):
     await bot.send_chat_action(message.chat.id, ChatAction.TYPING)
     await asyncio.sleep(random.uniform(1, 2))
 
+    # ответ ИИ
     reply = await ai_reply(user_id, message.text)
-    await safe_send(message, reply)
 
-# ================== НАБЛЮДАТЕЛЬ ==================
+    print("BOT:", reply)
+
+    try:
+        await safe_send(message, reply)
+    except Exception as e:
+        print("SEND ERROR:", e)
+        await message.answer("что-то пошло не так")
+
+# ================= НАБЛЮДАТЕЛЬ =================
 
 async def watcher():
     night_texts = [
@@ -226,12 +251,11 @@ async def watcher():
             except:
                 pass
 
-# ================== ЗАПУСК ==================
+# ================= ЗАПУСК =================
 
 async def main():
-    print("каркуша проснулся")
+    print("каркуша запущен")
 
-    # 💀 фикс конфликта
     await bot.delete_webhook(drop_pending_updates=True)
 
     asyncio.create_task(watcher())
