@@ -44,6 +44,7 @@ def format_time_left(seconds):
     m = (seconds % 3600) // 60
 
     return f"{h}ч {m}м"
+
 # ====== КАРТИНКА ======
 def get_random_image():
     files = os.listdir(IMAGE_FOLDER)
@@ -52,69 +53,56 @@ def get_random_image():
     return os.path.join(IMAGE_FOLDER, random.choice(files))
 
 # ====== ОТПРАВКА ФОТО (С ЛОКОМ) ======
-
-import time
-import math
-
-COOLDOWN = 43200  # 12 часов
-
-def format_time_left(seconds):
-    seconds = max(0, math.ceil(seconds))
-    h = seconds // 3600
-    m = (seconds % 3600) // 60
-    return f"{h}ч {m}м"
-
-
 async def send_photo(message):
     user = message.from_user.id
-    now = time.time()
 
-    # 🔥 ЖЕСТКИЙ анти-спам флаг (моментальный)
-    if user in user_locks:
-        if now - user_locks[user] < 2:
-            return
+    if user not in user_locks:
+        user_locks[user] = asyncio.Lock()
 
-    user_locks[user] = now
+    if user_locks[user].locked():
+        return
 
-    last = last_photo_time.get(user, 0)
-    diff = now - last
+    async with user_locks[user]:
+        now = datetime.utcnow()
+        last = last_photo_time.get(user)
 
-    # ❌ если не прошло 12 часов
-    if diff < COOLDOWN:
-        remain = COOLDOWN - diff
+        if last:
+            diff = (now - last).total_seconds()
 
-        await message.answer(random.choice([
+            if diff < 43200:
+                remain = 43200 - diff
+                await message.answer(random.choice([
                     f"я уже сказал. {format_time_left(remain)}",
                     f"ты долбишь кнопку зря. {format_time_left(remain)}",
                     f"терпения нет совсем? {format_time_left(remain)}",
                     f"не выйдет. {format_time_left(remain)}"
-        ]), reply_markup=keyboard)
-        return
+                ]), reply_markup=keyboard)
+                return
 
-    # 🔥 КРИТИЧЕСКИЙ ФИКС:
-    # СРАЗУ блокируем следующую попытку
-    last_photo_time[user] = now
+        path = get_random_image()
+        if not path:
+            await message.answer("картинок нет", reply_markup=keyboard)
+            return
 
-    path = get_random_image()
-    if not path:
-        await message.answer("картинок нет", reply_markup=keyboard)
-        return
+        # ВАЖНО: фиксируем время ДО отправки
+        last_photo_time[user] = now
 
-    await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_PHOTO)
-    await asyncio.sleep(1)
+        await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_PHOTO)
+        await asyncio.sleep(1)
 
-    photo = FSInputFile(path)
+        photo = FSInputFile(path)
 
-    await message.answer_photo(
-        photo,
-        caption=random.choice([
-            "накаркал",
-            "держи",
-            "сам виноват",
-            "смотри"
-        ]),
-        reply_markup=keyboard
-    )
+        await message.answer_photo(
+            photo,
+            caption=random.choice([
+                "накаркал",
+                "держи",
+                "сам виноват",
+                "смотри"
+            ]),
+            reply_markup=keyboard
+        )
+
 # ====== СТАРТ ======
 @dp.message(CommandStart())
 async def start(message: types.Message):
