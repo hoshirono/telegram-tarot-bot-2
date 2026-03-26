@@ -35,12 +35,15 @@ keyboard = ReplyKeyboardMarkup(
 )
 
 # ====== ВРЕМЯ ======
+import math
+
 def format_time_left(seconds):
-    seconds = int(seconds)
+    seconds = max(0, math.ceil(seconds))  # округление ВВЕРХ
+
     h = seconds // 3600
     m = (seconds % 3600) // 60
-    return f"{h}ч {m}м"
 
+    return f"{h}ч {m}м"
 # ====== КАРТИНКА ======
 def get_random_image():
     files = os.listdir(IMAGE_FOLDER)
@@ -59,7 +62,7 @@ async def send_photo(message):
         return
 
     async with user_locks[user]:
-        now = datetime.now()
+        now = datetime.utcnow()
         last = last_photo_time.get(user)
 
         if last:
@@ -69,9 +72,9 @@ async def send_photo(message):
                 remain = 43200 - diff
                 await message.answer(random.choice([
                     f"я уже сказал. {format_time_left(remain)}",
-                    f"не выйдет. {format_time_left(remain)}",
-                    f"терпи. {format_time_left(remain)}",
-                    f"ещё рано. {format_time_left(remain)}"
+                    f"ты долбишь кнопку зря. {format_time_left(remain)}",
+                    f"терпения нет совсем? {format_time_left(remain)}",
+                    f"не выйдет. {format_time_left(remain)}"
                 ]), reply_markup=keyboard)
                 return
 
